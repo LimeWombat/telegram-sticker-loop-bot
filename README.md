@@ -58,7 +58,7 @@ Output is a silent H.264 MP4 sent via `sendAnimation` — smaller and crisper th
 **Requirements:** Python 3.12+, plus `ffmpeg` & `ffprobe` on `PATH`. No browser, no Node.js — `.tgs` rendering is native via rlottie.
 
 ```bash
-git clone https://github.com/lemonchikHere/telegram-sticker-loop-bot.git
+git clone https://github.com/LimeWombat/telegram-sticker-loop-bot.git
 cd telegram-sticker-loop-bot
 
 # Python deps (python-telegram-bot, rlottie-python, Pillow)

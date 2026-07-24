@@ -2586,7 +2586,7 @@ async def on_menu_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) -
             f"{tg_emoji('bot', '⭐')} <b>Поддержать разработчика</b>\n\n"
             "Бот бесплатный и с открытым кодом.\n"
             "Если хочешь поддержать — звёздочка на GitHub решает:\n"
-            "github.com/lemonchikHere/telegram-sticker-loop-bot\n\n"
+            "github.com/LimeWombat/telegram-sticker-loop-bot\n\n"
             "Или напиши @lewombats — ideas, баги, спасибо ❤",
             main_menu_keyboard(current),
         )
