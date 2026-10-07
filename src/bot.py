@@ -155,6 +155,9 @@ class ResultRef:
     source: SourceRef
     chat_id: int
     message_id: int
+    file_id: str | None = None
+    output_format: str = "gif"
+    caption: str = ""
 
 
 @dataclass(frozen=True)
@@ -1909,7 +1912,33 @@ async def process_source(
     started = time.time()
     job_dir = Path(tempfile.mkdtemp(prefix="job-", dir=RUNS_DIR))
     sent_message: Message | None = None
+    loading_shown = False
     try:
+        if edit_target:
+            if REFRESH_REVISIONS.get(user_id) != refresh_revision:
+                return None
+            if not edit_target.file_id:
+                previous = await context.bot.edit_message_caption(
+                    chat_id=edit_target.chat_id, message_id=edit_target.message_id,
+                    caption=t("Генерируется…"),
+                )
+                media = previous.animation or previous.video or previous.document
+                previous_format = "gif" if previous.animation else "video" if previous.video else "file"
+                edit_target = replace(edit_target, file_id=media.file_id, output_format=previous_format)
+                LAST_RESULT[user_id] = edit_target
+                loading_shown = True
+                await asyncio.to_thread(save_render_session, user_id)
+            try:
+                await context.bot.edit_message_media(
+                    chat_id=edit_target.chat_id, message_id=edit_target.message_id,
+                    media=InputMediaAnimation(media=ROOT / "assets/loading.gif", caption=t("Генерируется…")),
+                    read_timeout=60, write_timeout=120, connect_timeout=30, pool_timeout=60,
+                )
+            except BadRequest as error:
+                if "message is not modified" not in str(error).lower():
+                    raise
+            loading_shown = True
+            logging.info("Showing loading animation for message %s, background %s", edit_target.message_id, settings.background_hex)
         await context.bot.send_chat_action(chat_id=message.chat_id, action=ChatAction.UPLOAD_VIDEO)
         source_path = await download_source(context, source, job_dir)
         output = await asyncio.to_thread(render_source, source_path, job_dir, settings, user_id)
@@ -1982,10 +2011,14 @@ async def process_source(
                     connect_timeout=30,
                     pool_timeout=60,
                 )
-        if sent_message and not edit_target:
-            LAST_SOURCE[user_id] = source
-            LAST_RESULT[user_id] = ResultRef(source, sent_message.chat_id, sent_message.message_id)
-            MISSING_RESULT_NOTICE.discard(user_id)
+        if sent_message:
+            media = sent_message.animation or sent_message.video or sent_message.document
+            LAST_RESULT[user_id] = ResultRef(
+                source, sent_message.chat_id, sent_message.message_id, media.file_id, settings.output_format, caption,
+            )
+            if not edit_target:
+                LAST_SOURCE[user_id] = source
+                MISSING_RESULT_NOTICE.discard(user_id)
             await asyncio.to_thread(save_render_session, user_id)
     except UserFacingError as error:
         await message.reply_text(str(error))
@@ -2024,6 +2057,20 @@ async def process_source(
                 f"⚠️ <code>{html.escape(str(error)[-300:])}</code>",
             )
     finally:
+        if (loading_shown and not sent_message and edit_target and edit_target.file_id
+                and REFRESH_REVISIONS.get(user_id) == refresh_revision
+                and LAST_RESULT.get(user_id) == edit_target):
+            try:
+                media_type = {"video": InputMediaVideo, "file": InputMediaDocument}.get(
+                    edit_target.output_format, InputMediaAnimation,
+                )
+                await context.bot.edit_message_media(
+                    chat_id=edit_target.chat_id, message_id=edit_target.message_id,
+                    media=media_type(media=edit_target.file_id, caption=edit_target.caption),
+                    read_timeout=60, write_timeout=120, connect_timeout=30, pool_timeout=60,
+                )
+            except TelegramError:
+                logging.exception("Failed to restore the previous render after a failed refresh")
         BUSY.discard(user_id)
         await gate.release()
         shutil.rmtree(job_dir, ignore_errors=True)
