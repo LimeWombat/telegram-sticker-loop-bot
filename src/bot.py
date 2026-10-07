@@ -2149,7 +2149,7 @@ async def on_mode_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) -
     uid = query.from_user.id
     PENDING_ACTIONS.pop(uid, None)
     mode = (query.data or "").split(":", 1)[-1]
-    if mode == "settings":
+    if mode in {"settings", "loop"}:
         await send_menu_message(query.message, settings_for(uid))
         return
     if mode == "help":
@@ -3227,6 +3227,8 @@ async def post_init(app: Application) -> None:
 class LocalizedApplication(Application):
     async def process_update(self, update: object) -> None:
         user = update.effective_user if isinstance(update, Update) else None
+        if isinstance(update, Update) and update.callback_query:
+            logging.info("Button callback user=%s data=%s", user.id if user else None, update.callback_query.data)
         chosen = await asyncio.to_thread(selected_language, user.id) if user else None
         language = chosen or normalize_language(user.language_code if user else "ru")
         token = LANGUAGE.set(language)
