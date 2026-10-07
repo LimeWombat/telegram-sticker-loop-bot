@@ -1929,11 +1929,12 @@ async def process_source(
                 loading_shown = True
                 await asyncio.to_thread(save_render_session, user_id)
             try:
-                await context.bot.edit_message_media(
-                    chat_id=edit_target.chat_id, message_id=edit_target.message_id,
-                    media=InputMediaAnimation(media=ROOT / "assets/loading.gif", caption=t("Генерируется…")),
-                    read_timeout=60, write_timeout=120, connect_timeout=30, pool_timeout=60,
-                )
+                with (ROOT / "assets/loading.gif").open("rb") as loading_file:
+                    await context.bot.edit_message_media(
+                        chat_id=edit_target.chat_id, message_id=edit_target.message_id,
+                        media=InputMediaAnimation(media=loading_file, caption=t("Генерируется…"), filename="loading.gif"),
+                        read_timeout=60, write_timeout=120, connect_timeout=30, pool_timeout=60,
+                    )
             except BadRequest as error:
                 if "message is not modified" not in str(error).lower():
                     raise
