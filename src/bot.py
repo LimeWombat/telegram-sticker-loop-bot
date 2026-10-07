@@ -48,6 +48,8 @@ from telegram.ext import (
     filters,
 )
 
+from src.i18n import LANGUAGES, LANGUAGE, normalize_language, t
+
 from src.badge import render_static, render_wave_webm
 from src.emoji import render_animated_emoji
 from src.splitter import split_image, preview_grid, SplitResult, TILE
@@ -67,6 +69,18 @@ ENV_PATH = ROOT / ".env"
 LIMITS_STATE_PATH = VAR_DIR / "limits.json"
 DB_PATH = VAR_DIR / "bot.sqlite3"
 MENU_ASSETS_PATH = VAR_DIR / "menu_assets.json"
+
+# Animated custom emoji from FlagsPack; Indonesia is from RestrictedEmoji.
+COUNTRIES = {
+    "RU": ("Россия", "ru", "5467784510756104319"),
+    "US": ("United States", "en", "5465318847340882369"),
+    "IR": ("ایران", "fa", "5305571086409152543"),
+    "SA": ("السعودية", "ar", "5465447906813159441"),
+    "TR": ("Türkiye", "tr", "5235921989771736755"),
+    "ES": ("España", "es", "5465387605472323114"),
+    "BR": ("Brasil", "pt-br", "5467414838625969618"),
+    "ID": ("Indonesia", "id", "5291937150814661333"),
+}
 
 BACKGROUND_PRESETS = {
     "dark": ("Dark", "#080a0f"),
@@ -394,6 +408,16 @@ def init_db() -> None:
             ON users(blocked_at, last_seen)
             """
         )
+        columns = {row["name"] for row in conn.execute("PRAGMA table_info(users)")}
+        for column in ("ui_language", "country_code"):
+            if column not in columns:
+                conn.execute(f"ALTER TABLE users ADD COLUMN {column} TEXT")
+
+
+def selected_language(user_id: int) -> str | None:
+    with db_connect() as conn:
+        row = conn.execute("SELECT ui_language FROM users WHERE user_id = ?", (user_id,)).fetchone()
+    return row["ui_language"] if row and row["ui_language"] in LANGUAGES else None
 
 
 def upsert_user(user, action: str, *, render_started: bool = False) -> bool:
@@ -590,7 +614,7 @@ async def require_admin(update: Update, context: ContextTypes.DEFAULT_TYPE) -> b
     if await is_admin_user(update, context):
         return True
     if update.message:
-        await update.message.reply_text("Нет доступа к админ-командам.")
+        await update.message.reply_text(t('Нет доступа к админ-командам.'))
     return False
 
 
@@ -851,12 +875,12 @@ def format_duration(seconds: float) -> str:
     if seconds >= 3600:
         hours = seconds // 3600
         minutes = (seconds % 3600) // 60
-        return f"{hours} ч {minutes} мин" if minutes else f"{hours} ч"
+        return t('{0} ч {1} мин', hours, minutes) if minutes else t('{0} ч', hours)
     if seconds >= 60:
         minutes = seconds // 60
         rest = seconds % 60
-        return f"{minutes} мин {rest} сек" if rest else f"{minutes} мин"
-    return f"{seconds} сек"
+        return t('{0} мин {1} сек', minutes, rest) if rest else t('{0} мин', minutes)
+    return t('{0} сек', seconds)
 
 
 def ban_remaining(user_id: int, now: float | None = None) -> float:
@@ -950,7 +974,7 @@ def background_keyboard() -> InlineKeyboardMarkup:
     items = list(BACKGROUND_PRESETS.items())
     for index in range(0, len(items), 2):
         row = [
-            InlineKeyboardButton(f"{name} {color}", callback_data=f"bg:{key}")
+            InlineKeyboardButton(f"{t(name)} {color}", callback_data=f"bg:{key}")
             for key, (name, color) in items[index:index + 2]
         ]
         rows.append(row)
@@ -960,8 +984,8 @@ def background_keyboard() -> InlineKeyboardMarkup:
 def output_format_label(value: str) -> str:
     return {
         "gif": "GIF",
-        "video": "Видео",
-        "file": "Файл",
+        "video": t('Видео'),
+        "file": t('Файл'),
     }.get(value, "GIF")
 
 
@@ -1013,50 +1037,70 @@ def _bg_value_label(settings: RenderSettings) -> str:
 
 
 def settings_summary(settings: RenderSettings) -> str:
-    item_color = html.escape(settings.item_color_hex or "выкл")
-    notes = html.escape(settings.notes[:40] if settings.notes else "нет")
-    watermark = html.escape(settings.watermark_text if settings.watermark_enabled and settings.watermark_text else "выкл")
+    item_color = html.escape(settings.item_color_hex or t('выкл'))
+    notes = html.escape(settings.notes[:40] if settings.notes else t('нет'))
+    watermark = html.escape(settings.watermark_text if settings.watermark_enabled and settings.watermark_text else t('выкл'))
     return (
-        f"{tg_emoji('settings', '⚙')} <b>Настройки рендера</b>\n\n"
-        f"<blockquote>{tg_emoji('brush', '🖌')} <b>Фон:</b> {_bg_value_label(settings)}\n"
-        f"{tg_emoji('resolution', '↔')} <b>Размер:</b> {settings.width}×{settings.height} · {settings.fps} FPS\n"
-        f"{tg_emoji('file', '📁')} <b>Формат:</b> {output_format_label(settings.output_format)}\n"
-        f"{tg_emoji('brush', '🖌')} <b>Перекраска:</b> {item_color}\n"
-        f"{tg_emoji('write', '✍')} <b>Подпись:</b> {notes}\n"
-        f"{tg_emoji('text', '🔡')} <b>Вотермарка:</b> {watermark}</blockquote>\n\n"
-        "Кнопки показывают текущее значение — жми, чтобы поменять 👇"
+        t(
+            '{0} <b>Настройки рендера</b>\n'
+            '\n'
+            '<blockquote>{1} <b>Фон:</b> {2}\n'
+            '{3} <b>Размер:</b> {4}×{5} · {6} FPS\n'
+            '{7} <b>Формат:</b> {8}\n'
+            '{9} <b>Перекраска:</b> {10}\n'
+            '{11} <b>Подпись:</b> {12}\n'
+            '{13} <b>Вотермарка:</b> {14}</blockquote>\n'
+            '\n'
+            'Кнопки показывают текущее значение — жми, чтобы поменять 👇',
+            tg_emoji('settings', '⚙'),
+            tg_emoji('brush', '🖌'),
+            _bg_value_label(settings),
+            tg_emoji('resolution', '↔'),
+            settings.width,
+            settings.height,
+            settings.fps,
+            tg_emoji('file', '📁'),
+            output_format_label(settings.output_format),
+            tg_emoji('brush', '🖌'),
+            item_color,
+            tg_emoji('write', '✍'),
+            notes,
+            tg_emoji('text', '🔡'),
+            watermark,
+        )
     )
 
 
 def main_menu_keyboard(settings: RenderSettings) -> InlineKeyboardMarkup:
-    bg_val = "градиент" if settings.gradient_end_hex else settings.background_hex
-    color_val = settings.item_color_hex or "выкл"
-    notes_val = "есть" if settings.notes else "нет"
-    wm_val = "вкл" if settings.watermark_enabled else "выкл"
+    bg_val = t('градиент') if settings.gradient_end_hex else settings.background_hex
+    color_val = settings.item_color_hex or t('выкл')
+    notes_val = t('есть') if settings.notes else t('нет')
+    wm_val = t('вкл') if settings.watermark_enabled else t('выкл')
     return InlineKeyboardMarkup(
         [
             [
-                menu_button(f"Фон · {bg_val}", "menu:bg", "brush"),
-                menu_button(f"Размер · {settings.width}×{settings.height}", "menu:resolution", "resolution"),
+                menu_button(t('Фон · {0}', bg_val), "menu:bg", "brush"),
+                menu_button(t('Размер · {0}×{1}', settings.width, settings.height), "menu:resolution", "resolution"),
             ],
             [
-                menu_button(f"Формат · {output_format_label(settings.output_format)}", "menu:format", "file"),
-                menu_button(f"Перекраска · {color_val}", "menu:item_color", "brush"),
+                menu_button(t('Формат · {0}', output_format_label(settings.output_format)), "menu:format", "file"),
+                menu_button(t('Перекраска · {0}', color_val), "menu:item_color", "brush"),
             ],
             [
-                menu_button(f"Подпись · {notes_val}", "menu:notes", "write"),
-                menu_button(f"Вотермарка · {wm_val}", "menu:watermark", "text"),
+                menu_button(t('Подпись · {0}', notes_val), "menu:notes", "write"),
+                menu_button(t('Вотермарка · {0}', wm_val), "menu:watermark", "text"),
             ],
             [
-                menu_button("👁 Предпросмотр", "menu:preview", "eye"),
-                menu_button("Сбросить всё", "menu:reset", "delete"),
+                menu_button(t('👁 Предпросмотр'), "menu:preview", "eye"),
+                menu_button(t('Сбросить всё'), "menu:reset", "delete"),
             ],
+            [menu_button(t("🌍 Страна / язык"), "lang:menu:settings")],
         ]
     )
 
 
 def back_keyboard() -> InlineKeyboardMarkup:
-    return InlineKeyboardMarkup([[menu_button("Назад", "menu:main")]])
+    return InlineKeyboardMarkup([[menu_button(t('Назад'), "menu:main")]])
 
 
 def background_menu_keyboard(user_id: int) -> InlineKeyboardMarkup:
@@ -1067,15 +1111,15 @@ def background_menu_keyboard(user_id: int) -> InlineKeyboardMarkup:
     for index in range(0, len(items), 2):
         rows.append(
             [
-                menu_button(f"{name} {color}", f"setbg:{key}", "brush")
+                menu_button(f"{t(name)} {color}", f"setbg:{key}", "brush")
                 for key, (name, color) in items[index:index + 2]
             ]
         )
     if has_custom:
-        rows.append([menu_button("🖼 Сбросить на цвет", f"setbgimg:reset:{current_settings.background_key}", "delete")])
-    rows.append([menu_button("🌈 Градиент", "menu:gradient", "brush")])
-    rows.append([menu_button("🖼 Загрузить свой фон", "menu:bg_upload", "media")])
-    rows.append([menu_button("Назад", "menu:main")])
+        rows.append([menu_button(t('🖼 Сбросить на цвет'), f"setbgimg:reset:{current_settings.background_key}", "delete")])
+    rows.append([menu_button(t('🌈 Градиент'), "menu:gradient", "brush")])
+    rows.append([menu_button(t('🖼 Загрузить свой фон'), "menu:bg_upload", "media")])
+    rows.append([menu_button(t('Назад'), "menu:main")])
     return InlineKeyboardMarkup(rows)
 
 
@@ -1144,8 +1188,8 @@ async def _send_gradient_preview(
                 pass
 
     preview_id = GRADIENT_PREVIEW_CACHE.get(cache_key)
-    dir_label = "↕ вертикаль" if direction == "v" else "↔ горизонталь"
-    caption = f"{tg_emoji('brush', '🎨')} <b>Градиент:</b> {c0} → {c1} ({dir_label})"
+    dir_label = t('↕ вертикаль') if direction == "v" else t('↔ горизонталь')
+    caption = t('{0} <b>Градиент:</b> {1} → {2} ({3})', tg_emoji('brush', '🎨'), c0, c1, dir_label)
 
     if preview_id and message_id:
         try:
@@ -1170,21 +1214,20 @@ async def _send_gradient_preview(
     else:
         await context.bot.send_message(
             chat_id=chat_id,
-            text=f"{tg_emoji('brush', '🎨')} <b>Градиент:</b> {c0} → {c1} ({dir_label})\n\n"
-                 f"{tg_emoji('brush', '🎨')} <b>Выбери градиент:</b>",
+            text=t('{0} <b>Градиент:</b> {1} → {2} ({3})\n\n{4} <b>Выбери градиент:</b>', tg_emoji('brush', '🎨'), c0, c1, dir_label, tg_emoji('brush', '🎨')),
             reply_markup=gradient_menu_keyboard(current),
             parse_mode=ParseMode.HTML,
         )
 
 
 def gradient_menu_keyboard(current: RenderSettings) -> InlineKeyboardMarkup:
-    dir_label = {"h": "↔ горизонталь", "v": "↕ вертикаль"}
+    dir_label = {"h": t('↔ горизонталь'), "v": t('↕ вертикаль')}
     rows = []
     for name, c0, c1, direction in GRADIENT_PRESETS:
         active = current.gradient_end_hex == c1 and current.background_hex == c0
         prefix = "✓ " if active else ""
-        rows.append([menu_button(f"{prefix}{name} {dir_label.get(direction, '')}", f"setgradient:{direction}/{c0}/{c1}", "brush")])
-    rows.append([menu_button("Назад", "menu:bg")])
+        rows.append([menu_button(f"{prefix}{t(name)} {dir_label.get(direction, '')}", f"setgradient:{direction}/{c0}/{c1}", "brush")])
+    rows.append([menu_button(t('Назад'), "menu:bg")])
     return InlineKeyboardMarkup(rows)
 
 
@@ -1196,10 +1239,10 @@ def format_menu_keyboard(current: str) -> InlineKeyboardMarkup:
         [
             [
                 menu_button(label("gif", "GIF"), "fmt:gif", "file"),
-                menu_button(label("video", "Видео"), "fmt:video", "media"),
-                menu_button(label("file", "Файл"), "fmt:file", "file"),
+                menu_button(label("video", t('Видео')), "fmt:video", "media"),
+                menu_button(label("file", t('Файл')), "fmt:file", "file"),
             ],
-            [menu_button("Назад", "menu:main")],
+            [menu_button(t('Назад'), "menu:main")],
         ]
     )
 
@@ -1219,8 +1262,8 @@ def resolution_menu_keyboard(current: RenderSettings) -> InlineKeyboardMarkup:
                 for key, _ in items[index:index + 2]
             ]
         )
-    rows.append([menu_button("Свой размер…", "menu:res_custom")])
-    rows.append([menu_button("Назад", "menu:main")])
+    rows.append([menu_button(t('Свой размер…'), "menu:res_custom")])
+    rows.append([menu_button(t('Назад'), "menu:main")])
     return InlineKeyboardMarkup(rows)
 
 
@@ -1229,7 +1272,7 @@ def item_color_keyboard(current_hex: str | None) -> InlineKeyboardMarkup:
     def label(key: str) -> str:
         name, hex_color = ITEM_COLOR_PRESETS[key]
         mark = "✓ " if current_hex == hex_color else ""
-        return f"{mark}{name}"
+        return f"{mark}{t(name)}"
 
     rows = []
     items = list(ITEM_COLOR_PRESETS.items())
@@ -1240,10 +1283,10 @@ def item_color_keyboard(current_hex: str | None) -> InlineKeyboardMarkup:
                 for key, _ in items[index:index + 2]
             ]
         )
-    rows.append([menu_button("Свой цвет…", "menu:item_color_custom")])
+    rows.append([menu_button(t('Свой цвет…'), "menu:item_color_custom")])
     if current_hex:
-        rows.append([menu_button("Без цвета", "itemcolor:clear", "delete")])
-    rows.append([menu_button("Назад", "menu:main")])
+        rows.append([menu_button(t('Без цвета'), "itemcolor:clear", "delete")])
+    rows.append([menu_button(t('Назад'), "menu:main")])
     return InlineKeyboardMarkup(rows)
 
 
@@ -1251,19 +1294,19 @@ def item_color_keyboard(current_hex: str | None) -> InlineKeyboardMarkup:
 def notes_keyboard() -> InlineKeyboardMarkup:
     return InlineKeyboardMarkup(
         [
-            [menu_button("Убрать заметки", "notes:clear", "delete")],
-            [menu_button("Назад", "menu:main")],
+            [menu_button(t('Убрать заметки'), "notes:clear", "delete")],
+            [menu_button(t('Назад'), "menu:main")],
         ]
     )
 
 
 def watermark_keyboard(settings: RenderSettings) -> InlineKeyboardMarkup:
-    toggle = "✓ Включена" if settings.watermark_enabled else "Включить"
+    toggle = t('✓ Включена') if settings.watermark_enabled else t('Включить')
     return InlineKeyboardMarkup(
         [
             [menu_button(toggle, "wm:toggle", "check")],
-            [menu_button("Текст вотермарки", "wm:text", "text")],
-            [menu_button("Назад", "menu:main")],
+            [menu_button(t('Текст вотермарки'), "wm:text", "text")],
+            [menu_button(t('Назад'), "menu:main")],
         ]
     )
 
@@ -1736,7 +1779,7 @@ def render_source(source: Path, job_dir: Path, settings: RenderSettings, user_id
     if not output.exists() or output.stat().st_size == 0:
         raise RuntimeError("Renderer produced an empty output file")
     if output.stat().st_size > safety_config().max_output_bytes:
-        raise UserFacingError("Результат получился слишком большим для отправки. Попробуй другой стикер.")
+        raise UserFacingError(t('Результат получился слишком большим для отправки. Попробуй другой стикер.'))
     return output
 
 
@@ -1744,13 +1787,13 @@ async def download_source(context: ContextTypes.DEFAULT_TYPE, source: SourceRef,
     tg_file = await context.bot.get_file(source.file_id, read_timeout=30, connect_timeout=30)
     file_size = getattr(tg_file, "file_size", None)
     if file_size and file_size > safety_config().max_source_bytes:
-        raise UserFacingError("Файл стикера слишком большой для безопасной обработки.")
+        raise UserFacingError(t('Файл стикера слишком большой для безопасной обработки.'))
 
     suffix = Path(tg_file.file_path or "").suffix or ".bin"
     local_path = job_dir / f"source{suffix}"
     await tg_file.download_to_drive(custom_path=local_path, read_timeout=60, write_timeout=60)
     if local_path.stat().st_size > safety_config().max_source_bytes:
-        raise UserFacingError("Файл стикера слишком большой для безопасной обработки.")
+        raise UserFacingError(t('Файл стикера слишком большой для безопасной обработки.'))
     return local_path
 
 
@@ -1763,7 +1806,7 @@ async def reply_ban_or_warning(
     ban_seconds = note_violation(user_id, config)
     if ban_seconds:
         await message.reply_text(
-            f"Слишком много попыток подряд. Ставлю паузу на {format_duration(ban_seconds)}."
+            t('Слишком много попыток подряд. Ставлю паузу на {0}.', format_duration(ban_seconds))
         )
         return
     await message.reply_text(warning)
@@ -1781,7 +1824,7 @@ async def process_source(
     user_id = actor_user_id or (message.from_user.id if message.from_user else message.chat_id)
     remaining = ban_remaining(user_id)
     if remaining:
-        await message.reply_text(f"Пауза после спама еще {format_duration(remaining)}.")
+        await message.reply_text(t('Пауза после спама еще {0}.', format_duration(remaining)))
         return
 
     if user_id in BUSY:
@@ -1789,7 +1832,7 @@ async def process_source(
             message,
             user_id,
             config,
-            "Уже собираю предыдущую анимацию. Дождись результата; повторные стикеры подряд считаются спамом.",
+            t('Уже собираю предыдущую анимацию. Дождись результата; повторные стикеры подряд считаются спамом.'),
         )
         return
 
@@ -1800,9 +1843,12 @@ async def process_source(
             user_id,
             config,
             (
-                f"Лимит: не больше {config.per_user_window_jobs} рендеров "
-                f"за {format_duration(config.per_user_window_seconds)}. "
-                f"Попробуй через {format_duration(delay)}."
+                t(
+                    'Лимит: не больше {0} рендеров за {1}. Попробуй через {2}.',
+                    config.per_user_window_jobs,
+                    format_duration(config.per_user_window_seconds),
+                    format_duration(delay),
+                )
             ),
         )
         return
@@ -1815,7 +1861,7 @@ async def process_source(
             message,
             user_id,
             config,
-            f"Сейчас заняты все {config.max_global_renders} слота рендера. Попробуй чуть позже.",
+            t('Сейчас заняты все {0} слота рендера. Попробуй чуть позже.', config.max_global_renders),
         )
         return
 
@@ -1842,8 +1888,14 @@ async def process_source(
                 f"🖌 {_bg_value_label(settings)} · 📦 {size_mb:.2f} MB",
             )
         caption = (
-            f"Готово: {settings.width}x{settings.height}, "
-            f"{settings.background_hex}, {output_format_label(settings.output_format)}, {elapsed:.1f}s"
+            t(
+                'Готово: {0}x{1}, {2}, {3}, {4}s',
+                settings.width,
+                settings.height,
+                settings.background_hex,
+                output_format_label(settings.output_format),
+                format(elapsed, '.1f'),
+            )
         )
         if settings.notes:
             caption = f"{caption}\n{settings.notes[:800]}"
@@ -1892,8 +1944,7 @@ async def process_source(
     except Exception as error:  # noqa: BLE001 - bot replies need a compact user-facing error.
         logging.exception("Failed to process %s", source.label)
         await message.reply_text(
-            "Не смог собрать анимацию. Пришли другой стикер или попробуй фон попроще.\n"
-            f"Технически: {str(error)[-900:]}"
+            t('Не смог собрать анимацию. Пришли другой стикер или попробуй фон попроще.\nТехнически: {0}', str(error)[-900:])
         )
         if env_bool("LOG_RENDER_REQUESTS", True):
             await log_to_owner_chat(
@@ -1914,26 +1965,35 @@ async def process_source(
 def mode_intro_text() -> str:
     # премиум-эмодзи стоят 1:1 над кнопками того же порядка (см. mode_menu_keyboard)
     return (
-        f"{tg_emoji('bot', '🤖')} <b>StickerLoop</b>\n\n"
-        f"{tg_emoji('loading', '🔁')} <b>Стикер / эмодзи / видео</b> → зацикленный GIF\n"
-        f"{tg_emoji('write', '✍')} <b>Текст</b> → стикер или анимир. эмодзи\n"
-        f"{tg_emoji('media', '🖼')} <b>Фото</b> → пак эмодзи или GIF\n\n"
-        "Просто пришли что-нибудь — кнопки не обязательны."
+        t(
+            '{0} <b>StickerLoop</b>\n'
+            '\n'
+            '{1} <b>Стикер / эмодзи / видео</b> → зацикленный GIF\n'
+            '{2} <b>Текст</b> → стикер или анимир. эмодзи\n'
+            '{3} <b>Фото</b> → пак эмодзи или GIF\n'
+            '\n'
+            'Просто пришли что-нибудь — кнопки не обязательны.',
+            tg_emoji('bot', '🤖'),
+            tg_emoji('loading', '🔁'),
+            tg_emoji('write', '✍'),
+            tg_emoji('media', '🖼'),
+        )
     )
 
 
 def mode_menu_keyboard() -> InlineKeyboardMarkup:
     return InlineKeyboardMarkup(
         [
-            [menu_button("Стикер / видео → GIF", "mode:loop", "loading")],
+            [menu_button(t('Стикер / видео → GIF'), "mode:loop", "loading")],
             [
-                menu_button("Текст → стикер", "mode:text", "write"),
-                menu_button("Фото → эмодзи", "mode:photo", "media"),
+                menu_button(t('Текст → стикер'), "mode:text", "write"),
+                menu_button(t('Фото → эмодзи'), "mode:photo", "media"),
             ],
             [
-                menu_button("Настройки", "mode:settings", "settings"),
-                menu_button("Помощь", "mode:help", "info"),
+                menu_button(t('Настройки'), "mode:settings", "settings"),
+                menu_button(t('Помощь'), "mode:help", "info"),
             ],
+            [menu_button(t("🌍 Страна / язык"), "lang:menu:home")],
         ]
     )
 
@@ -1962,28 +2022,36 @@ async def help_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> No
         return
     await remember_user(update, context, "help")
     await update.message.reply_text(
-        HELP_TEXT, parse_mode=ParseMode.HTML, disable_web_page_preview=True,
-        reply_markup=InlineKeyboardMarkup([[menu_button("◀ Режимы", "mode:home", "info")]]),
+        t(HELP_TEXT), parse_mode=ParseMode.HTML, disable_web_page_preview=True,
+        reply_markup=InlineKeyboardMarkup([[menu_button(t('◀ Режимы'), "mode:home", "info")]]),
     )
 
 
 def rich_demo_text() -> str:
     e = tg_emoji
     return (
-        f"{e('bot', '🤖')} <b>StickerLoop</b> — <i>всё, что умею</i>, одним сообщением:\n\n"
-        "<b>жирный</b> · <i>курсив</i> · <u>подчёркнутый</u> · <s>зачёркнутый</s> · "
-        "<tg-spoiler>спойлер</tg-spoiler>\n"
-        "код: <code>/emoji ПРИВЕТ</code>\n"
-        "<pre>фото → 4/6/8 → пак кастом-эмодзи</pre>\n"
-        f"<blockquote>{e('write', '✍')} <b>Текст</b> → стикерпак · эмодзи · большой текст\n"
-        f"{e('media', '🖼')} <b>Фото</b> → нарезка в сетку\n"
-        f"{e('loading', '🔁')} <b>Стикер / видео</b> → GIF-луп</blockquote>\n"
-        f"<blockquote expandable>{e('info', 'ℹ')} <b>Подробнее (разверни) ▾</b>\n"
-        "• 12 стилей: хром, золото, неон, кислота, стекло…\n"
-        "• 4 анимации: блик, волна, пульс, свечение\n"
-        "• premium-эмодзи в тексте и на кнопках\n"
-        "• большие баннеры из десятков кастом-эмодзи\n"
-        'Бот: <a href="https://t.me/StickerLoopBot">@StickerLoopBot</a></blockquote>'
+        t(
+            '{0} <b>StickerLoop</b> — <i>всё, что умею</i>, одним сообщением:\n'
+            '\n'
+            '<b>жирный</b> · <i>курсив</i> · <u>подчёркнутый</u> · <s>зачёркнутый</s> · '
+            '<tg-spoiler>спойлер</tg-spoiler>\n'
+            'код: <code>/emoji ПРИВЕТ</code>\n'
+            '<pre>фото → 4/6/8 → пак кастом-эмодзи</pre>\n'
+            '<blockquote>{1} <b>Текст</b> → стикерпак · эмодзи · большой текст\n'
+            '{2} <b>Фото</b> → нарезка в сетку\n'
+            '{3} <b>Стикер / видео</b> → GIF-луп</blockquote>\n'
+            '<blockquote expandable>{4} <b>Подробнее (разверни) ▾</b>\n'
+            '• 12 стилей: хром, золото, неон, кислота, стекло…\n'
+            '• 4 анимации: блик, волна, пульс, свечение\n'
+            '• premium-эмодзи в тексте и на кнопках\n'
+            '• большие баннеры из десятков кастом-эмодзи\n'
+            'Бот: <a href="https://t.me/StickerLoopBot">@StickerLoopBot</a></blockquote>',
+            e('bot', '🤖'),
+            e('write', '✍'),
+            e('media', '🖼'),
+            e('loading', '🔁'),
+            e('info', 'ℹ'),
+        )
     )
 
 
@@ -2002,12 +2070,74 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     if not update.message or not update.effective_user:
         return
     await remember_user(update, context, "start")
+    if not await asyncio.to_thread(selected_language, update.effective_user.id):
+        await update.message.reply_text(
+            t("Выберите страну"),
+            reply_markup=language_keyboard("home", allow_back=False),
+        )
+        return
     await update.message.reply_text(
         mode_intro_text(),
         parse_mode=ParseMode.HTML,
         reply_markup=mode_menu_keyboard(),
         disable_web_page_preview=True,
     )
+
+
+def language_keyboard(destination: str, *, allow_back: bool = True) -> InlineKeyboardMarkup:
+    items = list(COUNTRIES.items())
+    rows = [
+        [InlineKeyboardButton(
+            name, callback_data=f"lang:set:{country}:{destination}",
+            api_kwargs={"icon_custom_emoji_id": emoji_id},
+        ) for country, (name, _, emoji_id) in items[index:index + 2]]
+        for index in range(0, len(items), 2)
+    ]
+    if allow_back:
+        callback = "menu:main" if destination == "settings" else "mode:home"
+        rows.append([menu_button(t("Назад"), callback)])
+    return InlineKeyboardMarkup(rows)
+
+
+async def on_language_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    query = update.callback_query
+    if not query or not query.message or not update.effective_user:
+        return
+    parts = (query.data or "").split(":")
+    if len(parts) not in (3, 4) or parts[0] != "lang":
+        await query.answer()
+        return
+    action = parts[1]
+    destination = parts[-1]
+    if destination not in {"home", "settings"}:
+        await query.answer()
+        return
+    if action == "menu" and len(parts) == 3:
+        await query.answer()
+        PENDING_ACTIONS.pop(update.effective_user.id, None)
+        await edit_menu_message(query.message, t("Выберите страну"), language_keyboard(destination))
+        return
+    if action != "set" or len(parts) != 4 or parts[2] not in COUNTRIES:
+        await query.answer()
+        return
+    country = parts[2]
+    _, code, _ = COUNTRIES[country]
+    await remember_user(update, context, "language")
+
+    def save() -> None:
+        with db_connect() as conn:
+            conn.execute("UPDATE users SET ui_language = ?, country_code = ? WHERE user_id = ?",
+                         (code, country, update.effective_user.id))
+
+    await asyncio.to_thread(save)
+    LANGUAGE.set(code)
+    PENDING_ACTIONS.pop(update.effective_user.id, None)
+    await query.answer(t("Страна и язык сохранены"))
+    if destination == "settings":
+        current = settings_for(update.effective_user.id)
+        await edit_menu_message(query.message, settings_summary(current), main_menu_keyboard(current))
+    else:
+        await edit_menu_message(query.message, mode_intro_text(), mode_menu_keyboard())
 
 
 async def on_mode_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
@@ -2031,22 +2161,25 @@ async def on_mode_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) -
         return
     if mode == "help":
         await query.message.reply_text(
-            HELP_TEXT, parse_mode=ParseMode.HTML, disable_web_page_preview=True,
-            reply_markup=InlineKeyboardMarkup([[menu_button("◀ Режимы", "mode:home", "info")]]),
+            t(HELP_TEXT), parse_mode=ParseMode.HTML, disable_web_page_preview=True,
+            reply_markup=InlineKeyboardMarkup([[menu_button(t('◀ Режимы'), "mode:home", "info")]]),
         )
         return
     prompts = {
-        "text": f"{tg_emoji('write', '✍')} <b>Текст → стикер</b>\n"
-                "Пришли текст — покажу превью: 12 стилей, 6 анимаций, "
-                "на выходе стикерпак, эмодзи или баннер.",
-        "big": f"{tg_emoji('text', '🔠')} <b>Большой текст</b>\n"
-               "Пришли текст → в карточке жми 🔠 ×4/×6/×8 — соберу баннер из эмодзи.",
-        "photo": f"{tg_emoji('media', '🖼')} <b>Фото → эмодзи</b>\n"
-                 "Пришли фото — нарежу в пак эмодзи (соберётся в картинку в чате) "
-                 "или сделаю GIF-луп, спрошу кнопками.",
-        "loop": f"{tg_emoji('loading', '🔁')} <b>GIF-луп</b>\n"
-                "Пришли стикер, эмодзи, видео, гиф или ссылку на пак — верну "
-                "зацикленный GIF. Фон и размер — в /settings.",
+        "text": t('{0} <b>Текст → стикер</b>\nПришли текст — покажу превью: 12 стилей, 6 анимаций, на выходе стикерпак, эмодзи или баннер.', tg_emoji('write', '✍')),
+        "big": t('{0} <b>Большой текст</b>\nПришли текст → в карточке жми 🔠 ×4/×6/×8 — соберу баннер из эмодзи.', tg_emoji('text', '🔠')),
+        "photo": t(
+            '{0} <b>Фото → эмодзи</b>\n'
+            'Пришли фото — нарежу в пак эмодзи (соберётся в картинку в чате) или сделаю GIF-луп, '
+            'спрошу кнопками.',
+            tg_emoji('media', '🖼'),
+        ),
+        "loop": t(
+            '{0} <b>GIF-луп</b>\n'
+            'Пришли стикер, эмодзи, видео, гиф или ссылку на пак — верну зацикленный GIF. Фон и размер '
+            '— в /settings.',
+            tg_emoji('loading', '🔁'),
+        ),
     }
     text = prompts.get(mode)
     if text:
@@ -2067,14 +2200,20 @@ async def limits(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     await remember_user(update, context, "limits")
     config = safety_config()
     await update.message.reply_text(
-        "⚙ <b>Лимиты</b>\n"
-        f"- одновременно рендерится максимум {config.max_global_renders} "
-        f"(сейчас активно {get_render_gate().active})\n"
-        "- у одного пользователя максимум 1 активная задача\n"
-        f"- не больше {config.per_user_window_jobs} рендеров за "
-        f"{format_duration(config.per_user_window_seconds)}\n"
-        f"- спам-пауза: {format_duration(config.ban_seconds)}\n"
-        f"- таймаут рендера: {format_duration(config.render_timeout_seconds)}",
+        t(
+            '⚙ <b>Лимиты</b>\n'
+            '- одновременно рендерится максимум {0} (сейчас активно {1})\n'
+            '- у одного пользователя максимум 1 активная задача\n'
+            '- не больше {2} рендеров за {3}\n'
+            '- спам-пауза: {4}\n'
+            '- таймаут рендера: {5}',
+            config.max_global_renders,
+            get_render_gate().active,
+            config.per_user_window_jobs,
+            format_duration(config.per_user_window_seconds),
+            format_duration(config.ban_seconds),
+            format_duration(config.render_timeout_seconds),
+        ),
         parse_mode=ParseMode.HTML,
     )
 
@@ -2103,7 +2242,7 @@ async def whoami(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     if not update.message or not update.effective_user:
         return
     await remember_user(update, context, "whoami")
-    await update.message.reply_text(f"Твой Telegram ID: {update.effective_user.id}")
+    await update.message.reply_text(t('Твой Telegram ID: {0}', update.effective_user.id))
 
 
 async def start_menu_asset_mode(update: Update, context: ContextTypes.DEFAULT_TYPE, section: str) -> None:
@@ -2359,7 +2498,7 @@ async def bg(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
         try:
             color = normalize_hex(context.args[0])
         except ValueError:
-            await update.message.reply_text("Цвет нужен в формате /bg #101820")
+            await update.message.reply_text(t('Цвет нужен в формате /bg #101820'))
             return
         update_settings(
             update.effective_user.id,
@@ -2369,12 +2508,12 @@ async def bg(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
             gradient_direction=None,
         )
         await update.message.reply_text(
-            f"Поставил фон {color}. Кидай стикер.",
+            t('Поставил фон {0}. Кидай стикер.', color),
             reply_markup=main_menu_keyboard(settings_for(update.effective_user.id)),
         )
         return
 
-    await update.message.reply_text("Выбери фон или отправь /bg #101820", reply_markup=background_menu_keyboard(update.effective_user.id))
+    await update.message.reply_text(t('Выбери фон или отправь /bg #101820'), reply_markup=background_menu_keyboard(update.effective_user.id))
 
 
 async def on_background_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
@@ -2397,10 +2536,10 @@ async def on_background_callback(update: Update, context: ContextTypes.DEFAULT_T
         gradient_direction=None,
     )
 
-    await query.message.reply_text(f"Фон: {name} {color}")
+    await query.message.reply_text(t('Фон: {0} {1}', name, color))
     source = LAST_SOURCE.get(query.from_user.id)
     if source and query.message:
-        await query.message.reply_text("Пересобираю последний стикер с новым фоном.")
+        await query.message.reply_text(t('Пересобираю последний стикер с новым фоном.'))
         await process_source(
             query.message,
             context,
@@ -2429,11 +2568,16 @@ async def on_menu_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) -
         shown = await show_section_menu_message(
             context,
             query.message,
-            f"{tg_emoji('brush', '🖌')} <b>Фон подложки</b>\n"
-            f"Сейчас: <b>{_bg_value_label(current)}</b>\n\n"
-            "• жми готовый пресет ниже\n"
-            "• или пришли свой HEX-цвет сообщением: <code>FFFFFF</code>, <code>#1e90ff</code>\n"
-            "• или выбери градиент / загрузи своё фото",
+            t(
+                '{0} <b>Фон подложки</b>\n'
+                'Сейчас: <b>{1}</b>\n'
+                '\n'
+                '• жми готовый пресет ниже\n'
+                '• или пришли свой HEX-цвет сообщением: <code>FFFFFF</code>, <code>#1e90ff</code>\n'
+                '• или выбери градиент / загрузи своё фото',
+                tg_emoji('brush', '🖌'),
+                _bg_value_label(current),
+            ),
             background_menu_keyboard(user_id),
             "palette",
         )
@@ -2444,9 +2588,15 @@ async def on_menu_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) -
         PENDING_ACTIONS[user_id] = pending_from_message("bg_upload", query.message)
         await edit_menu_message(
             query.message,
-            f"{tg_emoji('media', '🖼')} <b>Свой фон из фото</b>\n\n"
-            "Пришли фото сообщением — оно станет подложкой.\n"
-            f"Картинка растянется под размер {current.width}×{current.height}.",
+            t(
+                '{0} <b>Свой фон из фото</b>\n'
+                '\n'
+                'Пришли фото сообщением — оно станет подложкой.\n'
+                'Картинка растянется под размер {1}×{2}.',
+                tg_emoji('media', '🖼'),
+                current.width,
+                current.height,
+            ),
             back_keyboard(),
         )
         return
@@ -2472,9 +2622,16 @@ async def on_menu_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) -
         await show_section_menu_message(
             context,
             query.message,
-            f"{tg_emoji('resolution', '↔')} <b>Размер и частота кадров</b>\n"
-            f"Сейчас: <b>{current.width}×{current.height} · {current.fps} FPS</b>\n\n"
-            "Выбери пресет или задай свой через «Свой размер…»",
+            t(
+                '{0} <b>Размер и частота кадров</b>\n'
+                'Сейчас: <b>{1}×{2} · {3} FPS</b>\n'
+                '\n'
+                'Выбери пресет или задай свой через «Свой размер…»',
+                tg_emoji('resolution', '↔'),
+                current.width,
+                current.height,
+                current.fps,
+            ),
             resolution_menu_keyboard(current),
             "resolution",
         )
@@ -2483,12 +2640,19 @@ async def on_menu_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) -
         PENDING_ACTIONS[user_id] = pending_from_message("resolution", query.message)
         await edit_menu_message(
             query.message,
-            f"{tg_emoji('resolution', '↔')} <b>Свой размер</b>\n"
-            f"Сейчас: <b>{current.width}×{current.height} · {current.fps} FPS</b>\n\n"
-            "Пришли сообщением в одном из форматов:\n"
-            "• <code>1920x600</code> — точный размер\n"
-            "• <code>1280x720 60fps</code> — размер + частота кадров\n"
-            "• <code>16:9</code> или <code>2.35:1</code> — пропорции (ширина останется текущей)",
+            t(
+                '{0} <b>Свой размер</b>\n'
+                'Сейчас: <b>{1}×{2} · {3} FPS</b>\n'
+                '\n'
+                'Пришли сообщением в одном из форматов:\n'
+                '• <code>1920x600</code> — точный размер\n'
+                '• <code>1280x720 60fps</code> — размер + частота кадров\n'
+                '• <code>16:9</code> или <code>2.35:1</code> — пропорции (ширина останется текущей)',
+                tg_emoji('resolution', '↔'),
+                current.width,
+                current.height,
+                current.fps,
+            ),
             back_keyboard(),
         )
         return
@@ -2503,11 +2667,16 @@ async def on_menu_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) -
         await show_section_menu_message(
             context,
             query.message,
-            f"{tg_emoji('file', '📁')} <b>Формат результата</b>\n"
-            f"Сейчас: <b>{output_format_label(current.output_format)}</b>\n\n"
-            "• <b>GIF</b> — крутится в чате сам, без звука\n"
-            "• <b>Видео</b> — MP4 с плеером\n"
-            "• <b>Файл</b> — MP4 документом, без сжатия Telegram",
+            t(
+                '{0} <b>Формат результата</b>\n'
+                'Сейчас: <b>{1}</b>\n'
+                '\n'
+                '• <b>GIF</b> — крутится в чате сам, без звука\n'
+                '• <b>Видео</b> — MP4 с плеером\n'
+                '• <b>Файл</b> — MP4 документом, без сжатия Telegram',
+                tg_emoji('file', '📁'),
+                output_format_label(current.output_format),
+            ),
             format_menu_keyboard(current.output_format),
             "format",
         )
@@ -2522,20 +2691,29 @@ async def on_menu_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) -
         PENDING_ACTIONS[user_id] = pending_from_message("media", query.message)
         await edit_menu_message(
             query.message,
-            f"{tg_emoji('media', '🖼')} <b>Своя медиа → зацикленная анимация</b>\n\n"
-            "Пришли фото, видео, GIF, файл или стикер — отрендерю его "
-            "с текущим фоном, размером и форматом.\n"
-            "Фото в этом режиме идёт в рендер, а не в нарезку на эмодзи.",
+            t(
+                '{0} <b>Своя медиа → зацикленная анимация</b>\n'
+                '\n'
+                'Пришли фото, видео, GIF, файл или стикер — отрендерю его с текущим фоном, размером и '
+                'форматом.\n'
+                'Фото в этом режиме идёт в рендер, а не в нарезку на эмодзи.',
+                tg_emoji('media', '🖼'),
+            ),
             back_keyboard(),
         )
         return
     if data == "menu:item_color":
         await edit_menu_message(
             query.message,
-            f"{tg_emoji('brush', '🖌')} <b>Перекраска стикера/эмодзи</b>\n"
-            f"Сейчас: <b>{html.escape(current.item_color_hex if current.item_color_hex else 'выкл — исходные цвета')}</b>\n\n"
-            "Зальёт сам стикер одним цветом (силуэт), фон не трогает.\n"
-            "Удобно под фирменный стиль канала или сайта.",
+            t(
+                '{0} <b>Перекраска стикера/эмодзи</b>\n'
+                'Сейчас: <b>{1}</b>\n'
+                '\n'
+                'Зальёт сам стикер одним цветом (силуэт), фон не трогает.\n'
+                'Удобно под фирменный стиль канала или сайта.',
+                tg_emoji('brush', '🖌'),
+                html.escape(current.item_color_hex if current.item_color_hex else t('выкл — исходные цвета')),
+            ),
             item_color_keyboard(current.item_color_hex),
         )
         return
@@ -2546,8 +2724,7 @@ async def on_menu_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) -
             current = update_settings(user_id, item_color_hex=hex_color)
             await edit_menu_message(
                 query.message,
-                f"{tg_emoji('brush', '🖌')} <b>Цвет перекраски emoji/sticker:</b>\n"
-                f"Сейчас: {html.escape(current.item_color_hex)}",
+                t('{0} <b>Цвет перекраски emoji/sticker:</b>\nСейчас: {1}', tg_emoji('brush', '🖌'), html.escape(current.item_color_hex)),
                 item_color_keyboard(current.item_color_hex),
             )
         return
@@ -2555,10 +2732,14 @@ async def on_menu_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) -
         shown = await show_section_menu_message(
             context,
             query.message,
-            f"{tg_emoji('brush', '🖌')} <b>Свой цвет перекраски</b>\n\n"
-            "Пришли HEX-цвет сообщением: <code>FFFFFF</code>, <code>#e91e90</code>\n"
-            "Отправь <code>-</code> чтобы вернуть исходные цвета.",
-            InlineKeyboardMarkup([[menu_button("Назад", "menu:item_color")]]),
+            t(
+                '{0} <b>Свой цвет перекраски</b>\n'
+                '\n'
+                'Пришли HEX-цвет сообщением: <code>FFFFFF</code>, <code>#e91e90</code>\n'
+                'Отправь <code>-</code> чтобы вернуть исходные цвета.',
+                tg_emoji('brush', '🖌'),
+            ),
+            InlineKeyboardMarkup([[menu_button(t('Назад'), "menu:item_color")]]),
             "palette",
         )
         if shown:
@@ -2568,8 +2749,7 @@ async def on_menu_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) -
         current = update_settings(user_id, item_color_hex=None)
         await edit_menu_message(
             query.message,
-            f"{tg_emoji('brush', '🖌')} <b>Цвет перекраски emoji/sticker:</b>\n"
-            f"Сейчас: без перекраски",
+            t('{0} <b>Цвет перекраски emoji/sticker:</b>\nСейчас: без перекраски', tg_emoji('brush', '🖌')),
             item_color_keyboard(current.item_color_hex),
         )
         return
@@ -2577,10 +2757,15 @@ async def on_menu_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) -
         sent = await show_section_menu_message(
             context,
             query.message,
-            f"{tg_emoji('write', '✍')} <b>Подпись под результатом</b>\n"
-            f"Сейчас: <b>{html.escape(current.notes[:60]) if current.notes else 'нет'}</b>\n\n"
-            "Пришли текст сообщением — добавлю его под каждый готовый рендер.\n"
-            "Отправь <code>-</code> чтобы убрать подпись.",
+            t(
+                '{0} <b>Подпись под результатом</b>\n'
+                'Сейчас: <b>{1}</b>\n'
+                '\n'
+                'Пришли текст сообщением — добавлю его под каждый готовый рендер.\n'
+                'Отправь <code>-</code> чтобы убрать подпись.',
+                tg_emoji('write', '✍'),
+                html.escape(current.notes[:60]) if current.notes else t('нет'),
+            ),
             notes_keyboard(),
             "notes",
         )
@@ -2595,16 +2780,14 @@ async def on_menu_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) -
         return
     if data == "menu:watermark":
         wm_state = (
-            f"вкл · «{html.escape(current.watermark_text)}»"
+            t('вкл · «{0}»', html.escape(current.watermark_text))
             if current.watermark_enabled and current.watermark_text
-            else "выкл"
+            else t('выкл')
         )
         await show_section_menu_message(
             context,
             query.message,
-            f"{tg_emoji('text', '🔡')} <b>Вотермарка</b>\n"
-            f"Сейчас: <b>{wm_state}</b>\n\n"
-            "Полупрозрачный текст в углу результата — например, имя канала.",
+            t('{0} <b>Вотермарка</b>\nСейчас: <b>{1}</b>\n\nПолупрозрачный текст в углу результата — например, имя канала.', tg_emoji('text', '🔡'), wm_state),
             watermark_keyboard(current),
             "watermark",
         )
@@ -2617,9 +2800,13 @@ async def on_menu_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) -
         PENDING_ACTIONS[user_id] = pending_from_message("watermark_text", query.message)
         await edit_menu_message(
             query.message,
-            f"{tg_emoji('text', '🔡')} <b>Текст вотермарки</b>\n\n"
-            "Пришли текст сообщением (до 48 символов) — он появится в углу.\n"
-            "Отправь <code>-</code> чтобы выключить вотермарку.",
+            t(
+                '{0} <b>Текст вотермарки</b>\n'
+                '\n'
+                'Пришли текст сообщением (до 48 символов) — он появится в углу.\n'
+                'Отправь <code>-</code> чтобы выключить вотермарку.',
+                tg_emoji('text', '🔡'),
+            ),
             back_keyboard(),
         )
         return
@@ -2628,15 +2815,18 @@ async def on_menu_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) -
         if not source:
             await edit_menu_message(
                 query.message,
-                f"{tg_emoji('eye', '👁')} <b>Пока нечего показывать.</b>\n"
-                "Сначала пришли стикер, эмодзи или медиа — потом жми «Предпросмотр», "
-                "и я пересоберу последний исходник с текущими настройками.",
+                t(
+                    '{0} <b>Пока нечего показывать.</b>\n'
+                    'Сначала пришли стикер, эмодзи или медиа — потом жми «Предпросмотр», и я пересоберу '
+                    'последний исходник с текущими настройками.',
+                    tg_emoji('eye', '👁'),
+                ),
                 main_menu_keyboard(current),
             )
             return
         await edit_menu_message(
             query.message,
-            f"{tg_emoji('loading', '🔄')} <b>Собираю предпросмотр...</b>",
+            t('{0} <b>Собираю предпросмотр...</b>', tg_emoji('loading', '🔄')),
             main_menu_keyboard(current),
         )
         await process_source(query.message, context, source, current, actor_user_id=user_id)
@@ -2648,8 +2838,7 @@ async def on_menu_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) -
         current = default_settings()
         await edit_menu_message(
             query.message,
-            f"{tg_emoji('check', '✅')} <b>Настройки сброшены к значениям по умолчанию.</b>\n\n"
-            f"{settings_summary(current)}",
+            t('{0} <b>Настройки сброшены к значениям по умолчанию.</b>\n\n{1}', tg_emoji('check', '✅'), settings_summary(current)),
             main_menu_keyboard(current),
         )
         return
@@ -2662,19 +2851,23 @@ async def on_menu_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) -
         current = update_settings(user_id, background_key=key, background_hex=hex_color)
         await edit_menu_message(
             query.message,
-            f"{tg_emoji('check', '✅')} <b>Фон сброшен на цвет.</b>\n\n"
-            f"{settings_summary(current)}",
+            t('{0} <b>Фон сброшен на цвет.</b>\n\n{1}', tg_emoji('check', '✅'), settings_summary(current)),
             main_menu_keyboard(current),
         )
         return
     if data == "menu:support":
         await edit_menu_message(
             query.message,
-            f"{tg_emoji('bot', '⭐')} <b>Поддержать разработчика</b>\n\n"
-            "Бот бесплатный и с открытым кодом.\n"
-            "Если хочешь поддержать — звёздочка на GitHub решает:\n"
-            "github.com/LimeWombat/telegram-sticker-loop-bot\n\n"
-            "Или напиши @lewombats — ideas, баги, спасибо ❤",
+            t(
+                '{0} <b>Поддержать разработчика</b>\n'
+                '\n'
+                'Бот бесплатный и с открытым кодом.\n'
+                'Если хочешь поддержать — звёздочка на GitHub решает:\n'
+                'github.com/LimeWombat/telegram-sticker-loop-bot\n'
+                '\n'
+                'Или напиши @lewombats — ideas, баги, спасибо ❤',
+                tg_emoji('bot', '⭐'),
+            ),
             main_menu_keyboard(current),
         )
         return
@@ -2728,7 +2921,7 @@ async def handle_pending_text(update: Update, context: ContextTypes.DEFAULT_TYPE
             await edit_pending_menu(
                 context,
                 pending,
-                f"{tg_emoji('media', '🖼')} <b>Жду именно фото, видео, GIF, файл или стикер.</b>",
+                t('{0} <b>Жду именно фото, видео, GIF, файл или стикер.</b>', tg_emoji('media', '🖼')),
                 back_keyboard(),
             )
             return True
@@ -2740,9 +2933,14 @@ async def handle_pending_text(update: Update, context: ContextTypes.DEFAULT_TYPE
                 await edit_pending_menu(
                     context,
                     pending,
-                    f"{tg_emoji('check', '✅')} <b>Режим добавления GIF в меню выключен.</b>\n"
-                    f"Раздел: {html.escape(menu_asset_section_label(section))}\n"
-                    f"Сейчас в разделе: {menu_asset_count(section)}",
+                    t(
+                        '{0} <b>Режим добавления GIF в меню выключен.</b>\n'
+                        'Раздел: {1}\n'
+                        'Сейчас в разделе: {2}',
+                        tg_emoji('check', '✅'),
+                        html.escape(menu_asset_section_label(section)),
+                        menu_asset_count(section),
+                    ),
                     main_menu_keyboard(current),
                 )
             else:
@@ -2750,8 +2948,12 @@ async def handle_pending_text(update: Update, context: ContextTypes.DEFAULT_TYPE
                 await edit_pending_menu(
                     context,
                     pending,
-                    f"{tg_emoji('media', '🖼')} <b>Кидай sticker/emoji/media для раздела "
-                    f"{html.escape(menu_asset_section_label(section))}.</b>\n- чтобы закончить.",
+                    t(
+                        '{0} <b>Кидай sticker/emoji/media для раздела {1}.</b>\n'
+                        '- чтобы закончить.',
+                        tg_emoji('media', '🖼'),
+                        html.escape(menu_asset_section_label(section)),
+                    ),
                     back_keyboard(),
                 )
             return True
@@ -2760,7 +2962,7 @@ async def handle_pending_text(update: Update, context: ContextTypes.DEFAULT_TYPE
         await edit_pending_menu(
             context,
             pending,
-            f"{tg_emoji('info', 'ℹ')} <b>Не понял формат.</b>\nПопробуй еще раз или нажми Назад.",
+            t('{0} <b>Не понял формат.</b>\nПопробуй еще раз или нажми Назад.', tg_emoji('info', 'ℹ')),
             back_keyboard(),
         )
         return True
@@ -2789,7 +2991,7 @@ async def on_media(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     if pending and pending.action == "bg_upload":
         photo = update.message.photo
         if not photo or not photo[-1]:
-            await update.message.reply_text("Отправь именно фото (не файл, не стикер).")
+            await update.message.reply_text(t('Отправь именно фото (не файл, не стикер).'))
             return
         file_id = photo[-1].file_id
         bg_file = await context.bot.get_file(file_id)
@@ -2800,10 +3002,10 @@ async def on_media(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
         PENDING_ACTIONS.pop(update.effective_user.id, None)
         current = settings_for(update.effective_user.id)
         await send_menu_message(update.message, current)
-        await update.message.reply_text("🖼 Фон загружен! Кидай стикер.")
+        await update.message.reply_text(t('🖼 Фон загружен! Кидай стикер.'))
         source = LAST_SOURCE.get(update.effective_user.id)
         if source:
-            await update.message.reply_text("Пересобираю последний с новым фоном.")
+            await update.message.reply_text(t('Пересобираю последний с новым фоном.'))
             await process_source(update.message, context, source, current)
         return
 
@@ -2913,12 +3115,12 @@ async def on_grid_loop(update: Update, context: ContextTypes.DEFAULT_TYPE) -> No
     user_id = query.from_user.id
     file_id = PENDING_SPLIT.pop(user_id, None)
     if not file_id:
-        await query.edit_message_text("Картинка потерялась 🤷 Пришли фото заново.")
+        await query.edit_message_text(t('Картинка потерялась 🤷 Пришли фото заново.'))
         return
     source = SourceRef(file_id, "custom photo")
     LAST_SOURCE[user_id] = source
     try:
-        await query.edit_message_text("🔁 Собираю GIF-луп из фото…")
+        await query.edit_message_text(t('🔁 Собираю GIF-луп из фото…'))
     except TelegramError:
         pass
     await process_source(query.message, context, source, settings_for(user_id), actor_user_id=user_id)
@@ -2956,14 +3158,14 @@ async def on_text(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
                 sticker_set = await context.bot.get_sticker_set(pack_name, read_timeout=30)
             except TelegramError:
                 logging.exception("Failed to load sticker set %s", pack_name)
-                await update.message.reply_text("Не смог открыть этот pack. Проверь ссылку.")
+                await update.message.reply_text(t('Не смог открыть этот pack. Проверь ссылку.'))
                 return
             limit = max(1, min(env_int("MAX_PACK_RENDER_ITEMS", 3), 10))
             stickers = list(sticker_set.stickers[:limit])
             if not stickers:
-                await update.message.reply_text("В этом pack не нашел стикеров.")
+                await update.message.reply_text(t('В этом pack не нашел стикеров.'))
                 return
-            await update.message.reply_text(f"Нашел pack, рендерю первые {len(stickers)} шт.")
+            await update.message.reply_text(t('Нашел pack, рендерю первые {0} шт.', len(stickers)))
             for index, sticker in enumerate(stickers):
                 source = source_from_sticker(sticker)
                 LAST_SOURCE[update.effective_user.id] = source
@@ -2984,7 +3186,7 @@ async def on_text(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     stickers: Iterable[Sticker] = await context.bot.get_custom_emoji_stickers(ids[:limit], read_timeout=30)
     sticker_list = list(stickers)
     if not sticker_list:
-        await update.message.reply_text("Не смог получить файл этого custom emoji.")
+        await update.message.reply_text(t('Не смог получить файл этого custom emoji.'))
         return
 
     source = source_from_sticker(sticker_list[0])
@@ -3029,9 +3231,9 @@ async def on_inline_query(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
         InlineQueryResultArticle(
             id="help",
             title="🎞 Sticker Loop Bot",
-            description="Сначала отправь стикер в бота, затем возвращайся сюда",
+            description=t('Сначала отправь стикер в бота, затем возвращайся сюда'),
             input_message_content=InputTextMessageContent(
-                f"Отправь стикер или emoji в @{(context.bot.username or 'StickerLoopBot')} чтобы получить анимацию"
+                t('Отправь стикер или emoji в @{0} чтобы получить анимацию', context.bot.username or 'StickerLoopBot')
             ),
         )
     ]
@@ -3086,9 +3288,9 @@ async def _render_inline_result(
     return [
         InlineQueryResultArticle(
             id="error",
-            title="❌ Не вышло",
-            description="Попробуй ещё раз в боте",
-            input_message_content=InputTextMessageContent("Не смог собрать. Попробуй в @StickerLoopBot"),
+            title=t('❌ Не вышло'),
+            description=t('Попробуй ещё раз в боте'),
+            input_message_content=InputTextMessageContent(t('Не смог собрать. Попробуй в @StickerLoopBot')),
         )
     ]
 
@@ -3157,8 +3359,20 @@ async def post_init(app: Application) -> None:
 
     await safe_startup_api_call(
         "set_my_commands:default",
-        app.bot.set_my_commands(public_commands, scope=BotCommandScopeDefault()),
+        app.bot.set_my_commands(
+            [(command, t(description, language="en")) for command, description in public_commands],
+            scope=BotCommandScopeDefault(),
+        ),
     )
+
+    for code in LANGUAGES:
+        await safe_startup_api_call(
+            f"set_my_commands:{code}",
+            app.bot.set_my_commands(
+                [(command, t(description, language=code)) for command, description in public_commands],
+                scope=BotCommandScopeDefault(), language_code="pt" if code == "pt-br" else code,
+            ),
+        )
 
     target = log_chat_id()
     if target:
@@ -3176,9 +3390,22 @@ async def post_init(app: Application) -> None:
     await _auto_generate_menu_assets(app)
 
 
+class LocalizedApplication(Application):
+    async def process_update(self, update: object) -> None:
+        user = update.effective_user if isinstance(update, Update) else None
+        chosen = await asyncio.to_thread(selected_language, user.id) if user else None
+        language = chosen or normalize_language(user.language_code if user else "ru")
+        token = LANGUAGE.set(language)
+        try:
+            await super().process_update(update)
+        finally:
+            LANGUAGE.reset(token)
+
+
 def build_app(token: str) -> Application:
     return (
         ApplicationBuilder()
+        .application_class(LocalizedApplication)
         .token(token)
         .post_init(post_init)
         .concurrent_updates(True)
@@ -3208,6 +3435,7 @@ def main() -> None:
     app = build_app(token)
     app.add_handler(InlineQueryHandler(on_inline_query))
     app.add_handler(CommandHandler("start", start))
+    app.add_handler(CallbackQueryHandler(on_language_callback, pattern=r"^lang:"))
     app.add_handler(CommandHandler("help", help_command))
     app.add_handler(CommandHandler(["settings", "menu"], settings))
     app.add_handler(CommandHandler("limits", limits))

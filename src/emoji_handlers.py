@@ -35,6 +35,8 @@ from telegram.ext import ContextTypes
 # щедрые таймауты: аплоад стикеров бывает медленным
 API_KW = dict(read_timeout=60, write_timeout=60, connect_timeout=30, pool_timeout=60)
 
+from src.i18n import t
+
 from src.render_text import render_text_image, to_png, to_webp, STYLES, DEFAULT_STYLE
 from src.animate import animate_text_webm, EFFECTS
 from src.splitter import split_image
@@ -181,19 +183,19 @@ def is_still_image(message: Message) -> bool:
 async def _split_to_emoji(bot, chat_id, user_id, image_bytes, cols, status, mode="cover"):
     me = await bot.get_me()
     res = split_image(image_bytes, cols=cols, mode=mode, max_emojis=MAX_SET_EMOJI)
-    await status.edit_text(f"✂️ Сетка {res.cols}×{res.rows} = {res.count} эмодзи, собираю набор…")
+    await status.edit_text(t('✂️ Сетка {0}×{1} = {2} эмодзи, собираю набор…', res.cols, res.rows, res.count))
     name = _slug("b", user_id, me.username)
 
     async def _prog(done, total):
         try:
-            await status.edit_text(f"📦 Добавляю эмодзи… {done}/{total}")
+            await status.edit_text(t('📦 Добавляю эмодзи… {0}/{1}', done, total))
         except Exception:
             pass
 
     await _add_tiles(bot, user_id, name, "pack", res.tiles, progress=_prog)
     sset = await bot.get_sticker_set(name=name, read_timeout=30)
     ids = [s.custom_emoji_id for s in sset.stickers]
-    await status.edit_text(f"✅ Набор 👉 https://t.me/addemoji/{name}\nСобираю в чате…")
+    await status.edit_text(t('✅ Набор 👉 https://t.me/addemoji/{0}\nСобираю в чате…', name))
     await _send_emoji_grid(bot, chat_id, ids, res.cols, res.rows)
     await _log_admin(
         bot,
@@ -208,7 +210,7 @@ def _grid_keyboard(default=DEFAULT_COLS) -> InlineKeyboardMarkup:
     btns = [InlineKeyboardButton(f"✂️ ×{n}" + (" ✓" if n == default else ""), callback_data=f"egrid:{n}")
             for n in GRID_CHOICES]
     return InlineKeyboardMarkup([
-        [InlineKeyboardButton("🔁 Сделать GIF-луп", callback_data="egrid:loop")],
+        [InlineKeyboardButton(t('🔁 Сделать GIF-луп'), callback_data="egrid:loop")],
         btns,
     ])
 
@@ -216,10 +218,13 @@ def _grid_keyboard(default=DEFAULT_COLS) -> InlineKeyboardMarkup:
 async def offer_grid(message: Message, file_id: str, user_id: int) -> None:
     PENDING_SPLIT[user_id] = file_id
     await message.reply_text(
-        "Что сделать с картинкой?\n\n"
-        "🔁 <b>GIF-луп</b> — зациклю с фоном из настроек\n"
-        "✂️ <b>Нарезка</b> — пак кастом-эмодзи, в чате соберётся обратно "
-        "(×4/×6/×8 — ширина сетки, больше клеток = чётче)",
+        t(
+            'Что сделать с картинкой?\n'
+            '\n'
+            '🔁 <b>GIF-луп</b> — зациклю с фоном из настроек\n'
+            '✂️ <b>Нарезка</b> — пак кастом-эмодзи, в чате соберётся обратно (×4/×6/×8 — ширина сетки, '
+            'больше клеток = чётче)',
+        ),
         parse_mode="HTML",
         reply_markup=_grid_keyboard(),
     )
@@ -239,11 +244,11 @@ async def grid_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) -> N
         cols = DEFAULT_COLS
     file_id = PENDING_SPLIT.pop(user_id, None)
     if not file_id:
-        await query.edit_message_text("Картинка потерялась 🤷 Пришли фото заново.")
+        await query.edit_message_text(t('Картинка потерялась 🤷 Пришли фото заново.'))
         return
     bot = context.bot
     try:
-        await query.edit_message_text("📥 Скачиваю картинку…")
+        await query.edit_message_text(t('📥 Скачиваю картинку…'))
         f = await bot.get_file(file_id)
         buf = BytesIO()
         await f.download_to_memory(buf)
@@ -252,7 +257,7 @@ async def grid_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) -> N
         log.exception("grid_callback failed")
         PENDING_SPLIT[user_id] = file_id  # вернуть картинку — повторный клик по кнопке сработает
         try:
-            await query.message.reply_text(f"❌ Ошибка: {e}")
+            await query.message.reply_text(t('❌ Ошибка: {0}', e))
         except Exception:
             pass
 
@@ -265,23 +270,23 @@ def _card_keyboard(style: str, anim: str) -> InlineKeyboardMarkup:
     keys = list(STYLES.keys())
     for i in range(0, len(keys), 3):
         rows.append([
-            InlineKeyboardButton(("✓ " if k == style else "") + STYLES[k].label,
+            InlineKeyboardButton(("✓ " if k == style else "") + t(STYLES[k].label),
                                  callback_data=f"etxt:style:{k}")
             for k in keys[i:i + 3]
         ])
     # анимации — по 3 в ряд
     for i in range(0, len(ANIM_CHOICES), 3):
         rows.append([
-            InlineKeyboardButton(("✓ " if a == anim else "") + lbl, callback_data=f"etxt:anim:{a}")
+            InlineKeyboardButton(("✓ " if a == anim else "") + t(lbl), callback_data=f"etxt:anim:{a}")
             for a, lbl in ANIM_CHOICES[i:i + 3]
         ])
     # действия
     rows.append([
-        InlineKeyboardButton("📦 Собрать стикерпак", callback_data="etxt:make:badge"),
-        InlineKeyboardButton("😎 Собрать эмодзи", callback_data="etxt:make:emoji"),
+        InlineKeyboardButton(t('📦 Собрать стикерпак'), callback_data="etxt:make:badge"),
+        InlineKeyboardButton(t('😎 Собрать эмодзи'), callback_data="etxt:make:emoji"),
     ])
     rows.append([
-        InlineKeyboardButton("🔠 Баннер ×4", callback_data="etxt:make:big4"),
+        InlineKeyboardButton(t('🔠 Баннер ×4'), callback_data="etxt:make:big4"),
         InlineKeyboardButton("🔠 ×6", callback_data="etxt:make:big6"),
         InlineKeyboardButton("🔠 ×8", callback_data="etxt:make:big8"),
     ])
@@ -294,13 +299,18 @@ def _preview_png(text: str, style: str) -> bytes:
 
 def _card_caption(text: str, style: str, anim: str) -> str:
     return (
-        f"🎨 <b>«{html.escape(text[:40])}»</b>\n"
-        f"Стиль: <b>{html.escape(STYLES[style].label)}</b> · "
-        f"Анимация: <b>{html.escape(ANIM_LABELS.get(anim, anim))}</b>\n\n"
-        "1️⃣ Выбери стиль и анимацию — превью обновится\n"
-        "2️⃣ Жми, что собрать:\n"
-        "📦 стикерпак (статика + анимация) · 😎 анимир. эмодзи 100×100\n"
-        "🔠 баннер из кастом-эмодзи (×4/×6/×8 — ширина сетки)"
+        t(
+            '🎨 <b>«{0}»</b>\n'
+            'Стиль: <b>{1}</b> · Анимация: <b>{2}</b>\n'
+            '\n'
+            '1️⃣ Выбери стиль и анимацию — превью обновится\n'
+            '2️⃣ Жми, что собрать:\n'
+            '📦 стикерпак (статика + анимация) · 😎 анимир. эмодзи 100×100\n'
+            '🔠 баннер из кастом-эмодзи (×4/×6/×8 — ширина сетки)',
+            html.escape(text[:40]),
+            html.escape(t(STYLES[style].label)),
+            html.escape(t(ANIM_LABELS.get(anim, anim))),
+        )
     )
 
 
@@ -326,14 +336,14 @@ async def text_card_callback(update: Update, context: ContextTypes.DEFAULT_TYPE)
     data = query.data or ""
     st = TEXT_STATE.get(user_id)
     if not st:
-        await query.answer("Карточка устарела, пришли текст заново.", show_alert=True)
+        await query.answer(t('Карточка устарела, пришли текст заново.'), show_alert=True)
         return
     bot = context.bot
     parts = data.split(":")  # etxt:style:lime / etxt:anim:wave / etxt:make:big6
 
     if parts[1] == "style":
         st["style"] = parts[2] if parts[2] in STYLES else DEFAULT_STYLE
-        await query.answer(STYLES[st["style"]].label)
+        await query.answer(t(STYLES[st["style"]].label))
         try:
             await query.edit_message_media(
                 media=InputMediaPhoto(
@@ -349,7 +359,7 @@ async def text_card_callback(update: Update, context: ContextTypes.DEFAULT_TYPE)
 
     if parts[1] == "anim":
         st["anim"] = parts[2] if parts[2] in EFFECTS else DEFAULT_ANIM
-        await query.answer(f"Анимация: {st['anim']}")
+        await query.answer(t('Анимация: {0}', st['anim']))
         try:
             await query.edit_message_reply_markup(reply_markup=_card_keyboard(st["style"], st["anim"]))
         except Exception:
@@ -358,17 +368,17 @@ async def text_card_callback(update: Update, context: ContextTypes.DEFAULT_TYPE)
 
     if parts[1] == "make":
         if not query.message:
-            await query.answer("Карточка недоступна, пришли текст заново.", show_alert=True)
+            await query.answer(t('Карточка недоступна, пришли текст заново.'), show_alert=True)
             return
-        await query.answer("Делаю…")
+        await query.answer(t('Делаю…'))
         kind = parts[2]
-        status = await query.message.reply_text("⏳ Рендерю…")
+        status = await query.message.reply_text(t('⏳ Рендерю…'))
         try:
             await _make(bot, query.message.chat_id, user_id, st, kind, status)
         except Exception as e:
             log.exception("text make failed")
             try:
-                await status.edit_text(f"❌ Ошибка: {e}")
+                await status.edit_text(t('❌ Ошибка: {0}', e))
             except Exception:
                 pass
 
@@ -378,7 +388,7 @@ async def _make(bot, chat_id, user_id, st, kind, status) -> None:
     text, style, anim = st["text"], st["style"], st["anim"]
 
     if kind == "badge":
-        await status.edit_text("🎨 Рендерю стикерпак…")
+        await status.edit_text(t('🎨 Рендерю стикерпак…'))
         base = render_text_image(text, style, width=512)
         static = to_webp(base)
         webm = animate_text_webm(base, anim)
@@ -391,7 +401,7 @@ async def _make(bot, chat_id, user_id, st, kind, status) -> None:
             ],
             sticker_type=StickerType.REGULAR, **API_KW,
         )
-        await status.edit_text(f"✅ Стикерпак 👉 https://t.me/addstickers/{name}")
+        await status.edit_text(t('✅ Стикерпак 👉 https://t.me/addstickers/{0}', name))
         await _log_admin(
             bot,
             f"📦 <b>Стикерпак из текста</b>\n{_user_link(user_id)}\n"
@@ -400,14 +410,13 @@ async def _make(bot, chat_id, user_id, st, kind, status) -> None:
         )
 
     elif kind == "emoji":
-        await status.edit_text("🎨 Рендерю эмодзи…")
+        await status.edit_text(t('🎨 Рендерю эмодзи…'))
         base = render_text_image(text, style, width=100, height=100)
         webm = animate_text_webm(base, anim, seconds=1.6)
         name = _slug("e", user_id, me.username)
         await _create_emoji_set(bot, user_id, name, f"{text[:40]} — @{me.username}",
                                 [InputSticker(sticker=webm, emoji_list=["✨"], format=StickerFormat.VIDEO)])
-        await status.edit_text(f"✅ Эмодзи-набор 👉 https://t.me/addemoji/{name}\n"
-                               "Поставь в чате — анимир. кастом-эмодзи с твоим текстом.")
+        await status.edit_text(t('✅ Эмодзи-набор 👉 https://t.me/addemoji/{0}\nПоставь в чате — анимир. кастом-эмодзи с твоим текстом.', name))
         await _log_admin(
             bot,
             f"😎 <b>Эмодзи из текста</b>\n{_user_link(user_id)}\n"
@@ -417,7 +426,7 @@ async def _make(bot, chat_id, user_id, st, kind, status) -> None:
 
     elif kind.startswith("big"):
         cols = int(kind[3:]) if kind[3:].isdigit() else 6
-        await status.edit_text(f"🔠 Рендерю большой текст (сетка {cols} в ширину)…")
+        await status.edit_text(t('🔠 Рендерю большой текст (сетка {0} в ширину)…', cols))
         img = render_text_image(text, style, width=cols * 100)
         png = to_png(img)
         await _split_to_emoji(bot, chat_id, user_id, png, cols, status, mode="contain")
@@ -440,7 +449,7 @@ async def emoji_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> N
         return
     text = re.sub(r'^/emoji(?:@\w+)?\s*', '', (update.message.text or "")).strip()
     if not text:
-        await update.message.reply_text("Напиши текст: /emoji ПРИВЕТ НАРОД")
+        await update.message.reply_text(t('Напиши текст: /emoji ПРИВЕТ НАРОД'))
         return
     await show_text_card(update.message, update.effective_user.id, text)
 
@@ -450,7 +459,7 @@ async def badge_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> N
         return
     text = re.sub(r'^/badge(?:@\w+)?\s*', '', (update.message.text or "")).strip()
     if not text:
-        await update.message.reply_text("Напиши текст: /badge АНОНС")
+        await update.message.reply_text(t('Напиши текст: /badge АНОНС'))
         return
     await show_text_card(update.message, update.effective_user.id, text)
 
@@ -461,7 +470,7 @@ async def split_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> N
     msg = update.message
     replied = msg.reply_to_message
     if not replied:
-        await msg.reply_text("Ответь командой /split на картинку, которую нарезать в эмодзи-пак.")
+        await msg.reply_text(t('Ответь командой /split на картинку, которую нарезать в эмодзи-пак.'))
         return
     file = None
     if replied.photo:
@@ -471,9 +480,9 @@ async def split_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> N
     elif replied.sticker and not replied.sticker.is_video and not replied.sticker.is_animated:
         file = await replied.sticker.get_file()
     if not file:
-        await msg.reply_text("Ответь на картинку, фото или статичный стикер.")
+        await msg.reply_text(t('Ответь на картинку, фото или статичный стикер.'))
         return
-    status = await msg.reply_text("📥 Скачиваю…")
+    status = await msg.reply_text(t('📥 Скачиваю…'))
     try:
         buf = BytesIO()
         await file.download_to_memory(buf)
@@ -481,4 +490,4 @@ async def split_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> N
                               buf.getvalue(), DEFAULT_COLS, status)
     except Exception as e:
         log.exception("split_command failed")
-        await status.edit_text(f"❌ Ошибка: {e}")
+        await status.edit_text(t('❌ Ошибка: {0}', e))
