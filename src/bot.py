@@ -3147,16 +3147,6 @@ async def post_init(app: Application) -> None:
     public_commands = [
         ("start", "что умеет бот"),
         ("settings", "настройки рендера"),
-        ("help", "как пользоваться"),
-    ]
-    admin_commands = [
-        *public_commands,
-        ("users", "админ: статистика пользователей"),
-        ("menu_assets", "админ: GIF для меню"),
-        ("menu_asset_palette", "админ: GIF для палитры"),
-        ("broadcast", "админ: черновик рассылки"),
-        ("broadcast_send", "админ: отправить рассылку"),
-        ("broadcast_cancel", "админ: отменить рассылку"),
     ]
 
     if env_bool("SYNC_BOT_PROFILE_ON_STARTUP", False):
@@ -3198,13 +3188,13 @@ async def post_init(app: Application) -> None:
     if target:
         await safe_startup_api_call(
             "set_my_commands:log_chat_admins",
-            app.bot.set_my_commands(admin_commands, scope=BotCommandScopeChatAdministrators(chat_id=target)),
+            app.bot.set_my_commands(public_commands, scope=BotCommandScopeChatAdministrators(chat_id=target)),
         )
 
     for admin_id in parse_int_list(os.getenv("ADMIN_USER_IDS")):
         await safe_startup_api_call(
             f"set_my_commands:admin:{admin_id}",
-            app.bot.set_my_commands(admin_commands, scope=BotCommandScopeChat(chat_id=admin_id)),
+            app.bot.set_my_commands(public_commands, scope=BotCommandScopeChat(chat_id=admin_id)),
         )
 
     await _auto_generate_menu_assets(app)
