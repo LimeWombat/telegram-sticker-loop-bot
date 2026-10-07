@@ -15,7 +15,7 @@ import subprocess
 import sys
 import tempfile
 import time
-from dataclasses import dataclass, replace
+from dataclasses import asdict, dataclass, replace
 from pathlib import Path
 from typing import Iterable, Sequence
 
@@ -28,6 +28,9 @@ from telegram import (
     InlineQueryResultArticle,
     InlineQueryResultCachedVideo,
     InputMediaPhoto,
+    InputMediaAnimation,
+    InputMediaDocument,
+    InputMediaVideo,
     InputSticker,
     InputTextMessageContent,
     MessageEntity,
@@ -148,6 +151,13 @@ class SourceRef:
 
 
 @dataclass(frozen=True)
+class ResultRef:
+    source: SourceRef
+    chat_id: int
+    message_id: int
+
+
+@dataclass(frozen=True)
 class SafetyConfig:
     max_global_renders: int
     per_user_window_jobs: int
@@ -212,6 +222,11 @@ class RenderGate:
 USER_SETTINGS: dict[int, RenderSettings] = {}
 USER_BG_IMAGES: dict[int, Path] = {}
 LAST_SOURCE: dict[int, SourceRef] = {}
+LAST_RESULT: dict[int, ResultRef] = {}
+REFRESH_TASKS: dict[int, asyncio.Task] = {}
+REFRESH_REQUESTS: dict[int, tuple[Message, int]] = {}
+REFRESH_REVISIONS: dict[int, int] = {}
+MISSING_RESULT_NOTICE: set[int] = set()
 PENDING_ACTIONS: dict[int, PendingAction] = {}
 BUSY: set[int] = set()
 USER_LIMITS: dict[int, UserLimitState] = {}
@@ -412,6 +427,48 @@ def init_db() -> None:
         for column in ("ui_language", "country_code"):
             if column not in columns:
                 conn.execute(f"ALTER TABLE users ADD COLUMN {column} TEXT")
+        conn.execute(
+            "CREATE TABLE IF NOT EXISTS render_sessions ("
+            "user_id INTEGER PRIMARY KEY, settings TEXT NOT NULL, result TEXT, has_background INTEGER NOT NULL)"
+        )
+
+
+def save_render_session(user_id: int) -> None:
+    with db_connect() as conn:
+        conn.execute("BEGIN IMMEDIATE")
+        result = LAST_RESULT.get(user_id)
+        conn.execute(
+            "INSERT INTO render_sessions(user_id, settings, result, has_background) VALUES (?, ?, ?, ?) "
+            "ON CONFLICT(user_id) DO UPDATE SET settings=excluded.settings, result=excluded.result, "
+            "has_background=excluded.has_background",
+            (user_id, json.dumps(asdict(settings_for(user_id))),
+             json.dumps(asdict(result)) if result else None, int(user_id in USER_BG_IMAGES)),
+        )
+
+
+def load_render_sessions() -> None:
+    with db_connect() as conn:
+        rows = conn.execute("SELECT * FROM render_sessions").fetchall()
+    for row in rows:
+        try:
+            user_id = row["user_id"]
+            USER_SETTINGS[user_id] = RenderSettings(**json.loads(row["settings"]))
+            if row["result"]:
+                saved = json.loads(row["result"])
+                saved["source"] = SourceRef(**saved["source"])
+                LAST_RESULT[user_id] = ResultRef(**saved)
+                LAST_SOURCE[user_id] = LAST_RESULT[user_id].source
+            background = BG_DIR / f"{user_id}.jpg"
+            if row["has_background"] and background.is_file():
+                USER_BG_IMAGES[user_id] = background
+        except (TypeError, ValueError, KeyError):
+            logging.exception("Failed to load a saved render session")
+
+
+def settings_signature(user_id: int) -> tuple:
+    background = USER_BG_IMAGES.get(user_id)
+    modified = background.stat().st_mtime_ns if background and background.is_file() else None
+    return settings_for(user_id), background, modified
 
 
 def selected_language(user_id: int) -> str | None:
@@ -1790,15 +1847,21 @@ async def process_source(
     settings: RenderSettings,
     actor_user_id: int | None = None,
     charge_rate: bool = True,
+    edit_target: ResultRef | None = None,
+    refresh_revision: int | None = None,
 ) -> Message | None:
     config = safety_config()
     user_id = actor_user_id or (message.from_user.id if message.from_user else message.chat_id)
     remaining = ban_remaining(user_id)
     if remaining:
+        if edit_target:
+            return None
         await message.reply_text(t('Пауза после спама еще {0}.', format_duration(remaining)))
         return
 
     if user_id in BUSY:
+        if edit_target:
+            return None
         await reply_ban_or_warning(
             message,
             user_id,
@@ -1828,6 +1891,8 @@ async def process_source(
     BUSY.add(user_id)
     if not await gate.try_acquire():
         BUSY.discard(user_id)
+        if edit_target:
+            return None
         await reply_ban_or_warning(
             message,
             user_id,
@@ -1839,7 +1904,8 @@ async def process_source(
     BUSY.add(user_id)
     if charge_rate:
         mark_render_start(user_id, config)
-    await asyncio.to_thread(mark_render_in_db, user_id)
+    if not edit_target:
+        await asyncio.to_thread(mark_render_in_db, user_id)
     started = time.time()
     job_dir = Path(tempfile.mkdtemp(prefix="job-", dir=RUNS_DIR))
     sent_message: Message | None = None
@@ -1848,7 +1914,7 @@ async def process_source(
         source_path = await download_source(context, source, job_dir)
         output = await asyncio.to_thread(render_source, source_path, job_dir, settings, user_id)
         elapsed = time.time() - started
-        if env_bool("LOG_RENDER_REQUESTS", True) and message.from_user:
+        if not edit_target and env_bool("LOG_RENDER_REQUESTS", True) and message.from_user:
             size_mb = output.stat().st_size / 1_000_000
             await log_to_owner_chat(
                 context,
@@ -1871,7 +1937,21 @@ async def process_source(
         if settings.notes:
             caption = f"{caption}\n{settings.notes[:800]}"
         with output.open("rb") as file_obj:
-            if settings.output_format == "video":
+            if edit_target:
+                if (REFRESH_REVISIONS.get(user_id) != refresh_revision
+                        or LAST_RESULT.get(user_id) != edit_target):
+                    return None
+                media_type = {"video": InputMediaVideo, "file": InputMediaDocument}.get(
+                    settings.output_format, InputMediaAnimation,
+                )
+                sent_message = await context.bot.edit_message_media(
+                    chat_id=edit_target.chat_id,
+                    message_id=edit_target.message_id,
+                    media=media_type(media=file_obj, caption=caption, filename="sticker-loop.mp4"),
+                    read_timeout=60, write_timeout=120, connect_timeout=30, pool_timeout=60,
+                )
+                logging.info("Updated existing render message in place")
+            elif settings.output_format == "video":
                 sent_message = await message.reply_video(
                     video=file_obj,
                     caption=caption,
@@ -1902,6 +1982,11 @@ async def process_source(
                     connect_timeout=30,
                     pool_timeout=60,
                 )
+        if sent_message and not edit_target:
+            LAST_SOURCE[user_id] = source
+            LAST_RESULT[user_id] = ResultRef(source, sent_message.chat_id, sent_message.message_id)
+            MISSING_RESULT_NOTICE.discard(user_id)
+            await asyncio.to_thread(save_render_session, user_id)
     except UserFacingError as error:
         await message.reply_text(str(error))
         if env_bool("LOG_RENDER_REQUESTS", True):
@@ -1912,6 +1997,18 @@ async def process_source(
                 f"🎞 {html.escape(source.label)}\n"
                 f"💬 {html.escape(str(error))}",
             )
+    except BadRequest as error:
+        if edit_target and "message is not modified" in str(error).lower():
+            return None
+        if edit_target and any(part in str(error).lower() for part in (
+            "message to edit not found", "message can't be edited", "message_id_invalid",
+        )):
+            LAST_RESULT.pop(user_id, None)
+            await asyncio.to_thread(save_render_session, user_id)
+            await message.reply_text(t("Пришли исходник ещё раз — дальше буду обновлять этот результат при смене настроек."))
+            return None
+        logging.exception("Telegram rejected a rendered result")
+        await message.reply_text(t('Не смог собрать анимацию. Пришли другой стикер или попробуй фон попроще.\nТехнически: {0}', str(error)[-900:]))
     except Exception as error:  # noqa: BLE001 - bot replies need a compact user-facing error.
         logging.exception("Failed to process %s", source.label)
         await message.reply_text(
@@ -1931,6 +2028,54 @@ async def process_source(
         await gate.release()
         shutil.rmtree(job_dir, ignore_errors=True)
     return sent_message
+
+
+async def refresh_result(app: Application, user_id: int) -> None:
+    try:
+        while True:
+            revision = REFRESH_REVISIONS[user_id]
+            await asyncio.sleep(0.3)
+            if revision != REFRESH_REVISIONS[user_id]:
+                continue
+            message, chat_id = REFRESH_REQUESTS[user_id]
+            target = LAST_RESULT.get(user_id)
+            if not target or target.chat_id != chat_id:
+                return
+            if user_id in BUSY or get_render_gate().active >= get_render_gate().limit:
+                continue
+            LANGUAGE.set(await asyncio.to_thread(selected_language, user_id) or LANGUAGE.get())
+            await process_source(
+                message, app, target.source, settings_for(user_id), actor_user_id=user_id,
+                charge_rate=False, edit_target=target, refresh_revision=revision,
+            )
+            if user_id in BUSY or get_render_gate().active >= get_render_gate().limit:
+                continue
+            if revision == REFRESH_REVISIONS[user_id]:
+                return
+    finally:
+        REFRESH_TASKS.pop(user_id, None)
+        REFRESH_REQUESTS.pop(user_id, None)
+
+
+async def settings_changed(app: Application, update: Update) -> None:
+    user_id = update.effective_user.id
+    await asyncio.to_thread(save_render_session, user_id)
+    message = update.effective_message
+    chat = update.effective_chat
+    if not message or not chat:
+        return
+    if user_id not in LAST_RESULT:
+        if user_id not in MISSING_RESULT_NOTICE:
+            with db_connect() as conn:
+                row = conn.execute("SELECT render_count FROM users WHERE user_id=?", (user_id,)).fetchone()
+            if row and row["render_count"]:
+                MISSING_RESULT_NOTICE.add(user_id)
+                await message.reply_text(t("Пришли исходник ещё раз — дальше буду обновлять этот результат при смене настроек."))
+        return
+    REFRESH_REVISIONS[user_id] = REFRESH_REVISIONS.get(user_id, 0) + 1
+    REFRESH_REQUESTS[user_id] = message, chat.id
+    if user_id not in REFRESH_TASKS:
+        REFRESH_TASKS[user_id] = app.create_task(refresh_result(app, user_id), update=update)
 
 
 def mode_intro_text() -> str:
@@ -3332,8 +3477,11 @@ class LocalizedApplication(Application):
         chosen = await asyncio.to_thread(selected_language, user.id) if user else None
         language = chosen or normalize_language(user.language_code if user else "ru")
         token = LANGUAGE.set(language)
+        before = settings_signature(user.id) if user else None
         try:
             await super().process_update(update)
+            if user and before != settings_signature(user.id):
+                await settings_changed(self, update)
         finally:
             LANGUAGE.reset(token)
 
@@ -3356,6 +3504,7 @@ def main() -> None:
     setup_logging()
     RUNS_DIR.mkdir(parents=True, exist_ok=True)
     init_db()
+    load_render_sessions()
     config = safety_config()
     GLOBAL_RENDER_GATE = RenderGate(config.max_global_renders)
     load_limit_state()
