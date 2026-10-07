@@ -186,5 +186,19 @@
   "🌍 Страна / язык": "🌍 País / idioma",
   "Страна и язык сохранены": "País e idioma salvos",
   "Пришли исходник ещё раз — дальше буду обновлять этот результат при смене настроек.": "Envie o arquivo original mais uma vez; depois atualizarei o mesmo resultado quando você mudar as configurações.",
-  "Генерируется…": "Gerando…"
+  "Генерируется…": "Gerando…",
+  "{0} <b>StickerLoop</b>\n\n{1} <b>Стикеры → GIF</b>\nПришли стикер, custom emoji или ссылку на стикерпак. Фон и размер можно поменять в настройках.": "{0} <b>StickerLoop</b>\n\n{1} <b>Figurinhas → GIF</b>\nEnvie uma figurinha, emoji personalizado ou link de pacote de figurinhas. Altere o fundo e o tamanho nas Configurações.",
+  "{0} <b>Как пользоваться</b>\n\n{1} Пришли стикер, custom emoji или ссылку на стикерпак — получишь зацикленный GIF.\n{2} В настройках можно выбрать фон, размер, перекраску, подпись и вотермарку.\n{3} После смены настроек результат обновится в том же сообщении. Пока он готовится, показывается анимация загрузки.\n{4} Страну и язык можно выбрать через меню.": "{0} <b>Como usar</b>\n\n{1} Envie uma figurinha, emoji personalizado ou link de pacote para receber um GIF em loop.\n{2} Nas Configurações, altere o fundo, tamanho, cor, legenda e marca d’água.\n{3} Ao mudar as configurações, o resultado é atualizado na mesma mensagem. Uma animação de carregamento aparece durante o preparo.\n{4} Escolha seu país e idioma pelo menu.",
+  "Пришли стикер, custom emoji или ссылку на стикерпак.": "Envie uma figurinha, emoji personalizado ou link de pacote de figurinhas.",
+  "Страна / язык": "País / idioma",
+  "Сбросить на цвет": "Voltar ao fundo de cor",
+  "Градиент": "Degradê",
+  "Загрузить свой фон": "Enviar seu fundo",
+  "Фон загружен! Кидай стикер.": "Fundo enviado! Envie uma figurinha.",
+  "Не вышло": "Não deu certo",
+  "Главное меню": "Menu principal",
+  "Стикеры → GIF": "Figurinhas → GIF",
+  "{0} <b>Настройки рендера</b>\n\n<blockquote>{1} <b>Фон:</b> {2}\n{3} <b>Размер:</b> {4}×{5} · {6} FPS\n{7} <b>Формат:</b> {8}\n{9} <b>Перекраска:</b> {10}\n{11} <b>Подпись:</b> {12}\n{13} <b>Вотермарка:</b> {14}</blockquote>\n\nКнопки показывают текущее значение — жми, чтобы поменять {15}": "{0} <b>Configurações de renderização</b>\n\n<blockquote>{1} <b>Fundo:</b> {2}\n{3} <b>Tamanho:</b> {4}×{5} · {6} FPS\n{7} <b>Formato:</b> {8}\n{9} <b>Recoloração:</b> {10}\n{11} <b>Legenda:</b> {12}\n{13} <b>Marca d’água:</b> {14}</blockquote>\n\nOs botões mostram o valor atual — toque para mudar {15}",
+  "{6} <b>Лимиты</b>\n- одновременно рендерится максимум {0} (сейчас активно {1})\n- у одного пользователя максимум 1 активная задача\n- не больше {2} рендеров за {3}\n- спам-пауза: {4}\n- таймаут рендера: {5}": "{6} <b>Limites</b>\n- no máximo {0} renderizações simultâneas ({1} ativas agora)\n- no máximo 1 tarefa ativa por usuário\n- no máximo {2} renderizações a cada {3}\n- pausa por spam: {4}\n- tempo limite de renderização: {5}",
+  "{0} <b>Поддержать разработчика</b>\n\nБот бесплатный и с открытым кодом.\nЕсли хочешь поддержать — звёздочка на GitHub решает:\ngithub.com/LimeWombat/telegram-sticker-loop-bot\n\nИли напиши @lewombats — ideas, баги, спасибо {1}": "{0} <b>Apoie o desenvolvedor</b>\n\nO bot é gratuito e tem código aberto.\nSe quiser apoiar, deixe uma estrela no GitHub:\ngithub.com/LimeWombat/telegram-sticker-loop-bot\n\nOu escreva para @lewombats — ideias, bugs, agradecimentos {1}"
 }

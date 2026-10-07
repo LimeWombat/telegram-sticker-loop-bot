@@ -38,16 +38,14 @@ You throw stickers at it. It throws back loops.
 | 🖼️ Static stickers | ✅ (short still loop) |
 | 😎 Inline custom & premium emoji from a text message | ✅ |
 | 📦 Sticker / emoji packs (`t.me/addemoji/…`, `t.me/addstickers/…`) | ✅ (first few items) |
-| 🧑‍🎨 Your own photo / video / GIF / document | ✅ |
 
-Output is a silent H.264 MP4 sent via `sendAnimation` — smaller and crisper than a real GIF, and Telegram shows it as one. Or get it back as a real **Telegram video sticker** (WEBM/VP9).
+Output is a silent H.264 MP4 sent via `sendAnimation` — smaller and crisper than a real GIF, and Telegram shows it as one.
 
 ## 🎨 Features
 
 - **Backgrounds on tap** — solid-color presets, **10 built-in blurred cloud backdrops** (silver, graphite, steel, warm + blue/rose/mint/lilac/sand/night), gradients, or any hex you want: `/bg #101820`.
 - **Upload your own background** — any photo works; it's auto-blurred into a soft backdrop.
-- **Multiple output formats** — GIF-style MP4, plain video, file, or a ready-to-use **video sticker** (512×512 WEBM/VP9, sent via `sendSticker`).
-- **Full inline menu** — change resolution, FPS, delivery format, background, emoji recolor, notes, and an optional watermark, all by editing the same message instead of spamming the chat.
+- **Full inline menu** — change resolution, FPS, background, emoji recolor, notes, and an optional watermark, all by editing the same message instead of spamming the chat.
 - **Fast native rendering** — `.tgs` animations are rendered with [**rlottie**](https://github.com/Samsung/rlottie) (the same engine Telegram itself uses), then muxed with `ffmpeg`. No browser, ~6× faster than headless-Chromium approaches.
 - **Built-in anti-abuse** — global render cap, per-user concurrency, rate limits, min gap between jobs, and auto temporary bans for repeat offenders. Bans persist across restarts.
 - **Owner tooling** — new-user logging, optional render logging, two-step `/broadcast` with confirmation, blocked-user pruning, and admin-curated menu assets.

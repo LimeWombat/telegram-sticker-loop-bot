@@ -186,5 +186,19 @@
   "🌍 Страна / язык": "🌍 Negara / bahasa",
   "Страна и язык сохранены": "Negara dan bahasa disimpan",
   "Пришли исходник ещё раз — дальше буду обновлять этот результат при смене настроек.": "Kirim file sumber sekali lagi; setelah itu, saya akan memperbarui hasil yang sama saat Anda mengubah pengaturan.",
-  "Генерируется…": "Sedang membuat…"
+  "Генерируется…": "Sedang membuat…",
+  "{0} <b>StickerLoop</b>\n\n{1} <b>Стикеры → GIF</b>\nПришли стикер, custom emoji или ссылку на стикерпак. Фон и размер можно поменять в настройках.": "{0} <b>StickerLoop</b>\n\n{1} <b>Stiker → GIF</b>\nKirim stiker, emoji kustom, atau tautan paket stiker. Ubah latar dan ukuran di Pengaturan.",
+  "{0} <b>Как пользоваться</b>\n\n{1} Пришли стикер, custom emoji или ссылку на стикерпак — получишь зацикленный GIF.\n{2} В настройках можно выбрать фон, размер, перекраску, подпись и вотермарку.\n{3} После смены настроек результат обновится в том же сообщении. Пока он готовится, показывается анимация загрузки.\n{4} Страну и язык можно выбрать через меню.": "{0} <b>Cara menggunakan</b>\n\n{1} Kirim stiker, emoji kustom, atau tautan paket stiker untuk mendapatkan GIF berulang.\n{2} Di Pengaturan, ubah latar, ukuran, warna, keterangan, dan tanda air.\n{3} Perubahan pengaturan memperbarui hasil di pesan yang sama. Animasi pemuatan tampil selama hasil disiapkan.\n{4} Pilih negara dan bahasa melalui menu.",
+  "Пришли стикер, custom emoji или ссылку на стикерпак.": "Kirim stiker, emoji kustom, atau tautan paket stiker.",
+  "Страна / язык": "Negara / bahasa",
+  "Сбросить на цвет": "Reset ke warna",
+  "Градиент": "Gradien",
+  "Загрузить свой фон": "Unggah latar sendiri",
+  "Фон загружен! Кидай стикер.": "Latar diunggah! Kirim stiker.",
+  "Не вышло": "Gagal",
+  "Главное меню": "Menu utama",
+  "Стикеры → GIF": "Stiker → GIF",
+  "{0} <b>Настройки рендера</b>\n\n<blockquote>{1} <b>Фон:</b> {2}\n{3} <b>Размер:</b> {4}×{5} · {6} FPS\n{7} <b>Формат:</b> {8}\n{9} <b>Перекраска:</b> {10}\n{11} <b>Подпись:</b> {12}\n{13} <b>Вотермарка:</b> {14}</blockquote>\n\nКнопки показывают текущее значение — жми, чтобы поменять {15}": "{0} <b>Pengaturan render</b>\n\n<blockquote>{1} <b>Latar:</b> {2}\n{3} <b>Ukuran:</b> {4}×{5} · {6} FPS\n{7} <b>Format:</b> {8}\n{9} <b>Pewarnaan ulang:</b> {10}\n{11} <b>Keterangan:</b> {12}\n{13} <b>Tanda air:</b> {14}</blockquote>\n\nTombol menampilkan nilai saat ini — ketuk untuk mengubahnya {15}",
+  "{6} <b>Лимиты</b>\n- одновременно рендерится максимум {0} (сейчас активно {1})\n- у одного пользователя максимум 1 активная задача\n- не больше {2} рендеров за {3}\n- спам-пауза: {4}\n- таймаут рендера: {5}": "{6} <b>Batas</b>\n- maksimal {0} render sekaligus (saat ini {1} aktif)\n- maksimal 1 tugas aktif per pengguna\n- maksimal {2} render per {3}\n- jeda karena spam: {4}\n- batas waktu render: {5}",
+  "{0} <b>Поддержать разработчика</b>\n\nБот бесплатный и с открытым кодом.\nЕсли хочешь поддержать — звёздочка на GitHub решает:\ngithub.com/LimeWombat/telegram-sticker-loop-bot\n\nИли напиши @lewombats — ideas, баги, спасибо {1}": "{0} <b>Dukung pengembang</b>\n\nBot ini gratis dan sumber terbuka.\nUntuk mendukungnya, beri bintang di GitHub:\ngithub.com/LimeWombat/telegram-sticker-loop-bot\n\nAtau hubungi @lewombats untuk berbagi ide, melaporkan bug, atau mengucapkan terima kasih {1}"
 }

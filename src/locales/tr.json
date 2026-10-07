@@ -186,5 +186,19 @@
   "🌍 Страна / язык": "🌍 Ülke / dil",
   "Страна и язык сохранены": "Ülke ve dil kaydedildi",
   "Пришли исходник ещё раз — дальше буду обновлять этот результат при смене настроек.": "Kaynak dosyayı bir kez daha gönderin; bundan sonra ayarları değiştirdiğinizde aynı sonucu güncelleyeceğim.",
-  "Генерируется…": "Oluşturuluyor…"
+  "Генерируется…": "Oluşturuluyor…",
+  "{0} <b>StickerLoop</b>\n\n{1} <b>Стикеры → GIF</b>\nПришли стикер, custom emoji или ссылку на стикерпак. Фон и размер можно поменять в настройках.": "{0} <b>StickerLoop</b>\n\n{1} <b>Çıkartmalar → GIF</b>\nBir çıkartma, özel emoji veya çıkartma paketi bağlantısı gönder. Arka planı ve boyutu Ayarlar üzerinden değiştir.",
+  "{0} <b>Как пользоваться</b>\n\n{1} Пришли стикер, custom emoji или ссылку на стикерпак — получишь зацикленный GIF.\n{2} В настройках можно выбрать фон, размер, перекраску, подпись и вотермарку.\n{3} После смены настроек результат обновится в том же сообщении. Пока он готовится, показывается анимация загрузки.\n{4} Страну и язык можно выбрать через меню.": "{0} <b>Nasıl kullanılır</b>\n\n{1} Döngü halinde oynayan bir GIF almak için çıkartma, özel emoji veya çıkartma paketi bağlantısı gönder.\n{2} Ayarlardan arka planı, boyutu, rengi, açıklamayı ve filigranı değiştirebilirsin.\n{3} Ayarlar değişince sonuç aynı mesajda güncellenir. Hazırlanırken yükleme animasyonu görünür.\n{4} Ülke ve dili menüden seç.",
+  "Пришли стикер, custom emoji или ссылку на стикерпак.": "Bir çıkartma, özel emoji veya çıkartma paketi bağlantısı gönder.",
+  "Страна / язык": "Ülke / dil",
+  "Сбросить на цвет": "Düz renge sıfırla",
+  "Градиент": "Renk geçişi",
+  "Загрузить свой фон": "Kendi arka planını yükle",
+  "Фон загружен! Кидай стикер.": "Arka plan yüklendi! Çıkartma gönder.",
+  "Не вышло": "Olmadı",
+  "Главное меню": "Ana menü",
+  "Стикеры → GIF": "Çıkartmalar → GIF",
+  "{0} <b>Настройки рендера</b>\n\n<blockquote>{1} <b>Фон:</b> {2}\n{3} <b>Размер:</b> {4}×{5} · {6} FPS\n{7} <b>Формат:</b> {8}\n{9} <b>Перекраска:</b> {10}\n{11} <b>Подпись:</b> {12}\n{13} <b>Вотермарка:</b> {14}</blockquote>\n\nКнопки показывают текущее значение — жми, чтобы поменять {15}": "{0} <b>Render ayarları</b>\n\n<blockquote>{1} <b>Arka plan:</b> {2}\n{3} <b>Boyut:</b> {4}×{5} · {6} FPS\n{7} <b>Biçim:</b> {8}\n{9} <b>Renklendirme:</b> {10}\n{11} <b>Açıklama:</b> {12}\n{13} <b>Filigran:</b> {14}</blockquote>\n\nDüğmeler mevcut değeri gösterir — değiştirmek için dokun {15}",
+  "{6} <b>Лимиты</b>\n- одновременно рендерится максимум {0} (сейчас активно {1})\n- у одного пользователя максимум 1 активная задача\n- не больше {2} рендеров за {3}\n- спам-пауза: {4}\n- таймаут рендера: {5}": "{6} <b>Sınırlar</b>\n- aynı anda en fazla {0} render (şu anda etkin: {1})\n- kullanıcı başına en fazla 1 etkin görev\n- {3} içinde en fazla {2} render\n- spam sonrası bekleme: {4}\n- render zaman aşımı: {5}",
+  "{0} <b>Поддержать разработчика</b>\n\nБот бесплатный и с открытым кодом.\nЕсли хочешь поддержать — звёздочка на GitHub решает:\ngithub.com/LimeWombat/telegram-sticker-loop-bot\n\nИли напиши @lewombats — ideas, баги, спасибо {1}": "{0} <b>Geliştiriciyi destekle</b>\n\nBot ücretsiz ve açık kaynaklı.\nDestek olmak istersen GitHub projesine yıldız verebilirsin:\ngithub.com/LimeWombat/telegram-sticker-loop-bot\n\nFikirlerini, hataları veya teşekkürlerini @lewombats adresine de yazabilirsin {1}"
 }
