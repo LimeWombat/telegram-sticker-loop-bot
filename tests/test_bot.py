@@ -25,15 +25,13 @@ class TestNormalizeHex:
         assert normalize_hex("#ff0000") == "#ff0000"
 
     def test_without_hash(self):
-        with pytest.raises(ValueError):
-            normalize_hex("ff0000")
+        assert normalize_hex("ff0000") == "#ff0000"
 
     def test_short_hex(self):
         assert normalize_hex("#f00") == "#ff0000"
 
     def test_short_hex_no_hash(self):
-        with pytest.raises(ValueError):
-            normalize_hex("f00")
+        assert normalize_hex("f00") == "#ff0000"
 
     def test_uppercase(self):
         assert normalize_hex("#FF0000") == "#ff0000"
@@ -52,12 +50,10 @@ class TestNormalizeHex:
             normalize_hex("")
 
     def test_three_digit_without_hash(self):
-        with pytest.raises(ValueError):
-            normalize_hex("abc")
+        assert normalize_hex("abc") == "#aabbcc"
 
     def test_six_digit_without_hash(self):
-        with pytest.raises(ValueError):
-            normalize_hex("abcdef")
+        assert normalize_hex("abcdef") == "#abcdef"
 
 
 class TestParseIntList:
