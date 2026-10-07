@@ -214,6 +214,7 @@ USER_SETTINGS: dict[int, RenderSettings] = {}
 USER_BG_IMAGES: dict[int, Path] = {}
 LAST_SOURCE: dict[int, SourceRef] = {}
 LAST_RESULT: dict[int, ResultRef] = {}
+SOURCE_CACHE: dict[str, tuple[str, bytes]] = {}
 REFRESH_TASKS: dict[int, asyncio.Task] = {}
 REFRESH_REQUESTS: dict[int, tuple[Message, int]] = {}
 REFRESH_REVISIONS: dict[int, int] = {}
@@ -1722,6 +1723,17 @@ def render_source(source: Path, job_dir: Path, settings: RenderSettings, user_id
 
 
 async def download_source(context: ContextTypes.DEFAULT_TYPE, source: SourceRef, job_dir: Path) -> Path:
+    cached = SOURCE_CACHE.pop(source.file_id, None)
+    if cached:
+        suffix, data = cached
+        if len(data) > safety_config().max_source_bytes:
+            raise UserFacingError(t('Файл стикера слишком большой для безопасной обработки.'))
+        SOURCE_CACHE[source.file_id] = cached
+        local_path = job_dir / f"source{suffix}"
+        await asyncio.to_thread(local_path.write_bytes, data)
+        logging.info("Reused cached sticker source")
+        return local_path
+
     tg_file = await context.bot.get_file(source.file_id, read_timeout=30, connect_timeout=30)
     file_size = getattr(tg_file, "file_size", None)
     if file_size and file_size > safety_config().max_source_bytes:
@@ -1732,6 +1744,13 @@ async def download_source(context: ContextTypes.DEFAULT_TYPE, source: SourceRef,
     await tg_file.download_to_drive(custom_path=local_path, read_timeout=60, write_timeout=60)
     if local_path.stat().st_size > safety_config().max_source_bytes:
         raise UserFacingError(t('Файл стикера слишком большой для безопасной обработки.'))
+    data = await asyncio.to_thread(local_path.read_bytes)
+    if len(data) <= 64 * 1024 * 1024:
+        SOURCE_CACHE.pop(source.file_id, None)
+        while SOURCE_CACHE and (len(SOURCE_CACHE) >= 128
+                or sum(len(item[1]) for item in SOURCE_CACHE.values()) + len(data) > 64 * 1024 * 1024):
+            SOURCE_CACHE.pop(next(iter(SOURCE_CACHE)))
+        SOURCE_CACHE[source.file_id] = (suffix, data)
     return local_path
 
 
@@ -1836,12 +1855,16 @@ async def process_source(
                 loading_shown = True
                 await asyncio.to_thread(save_render_session, user_id)
             try:
-                with (ROOT / "assets/loading.gif").open("rb") as loading_file:
-                    await context.bot.edit_message_media(
-                        chat_id=edit_target.chat_id, message_id=edit_target.message_id,
-                        media=InputMediaAnimation(media=loading_file, caption=f"{tg_emoji('loading')} {html.escape(t('Генерируется…'))}", parse_mode=ParseMode.HTML, filename="loading.gif"),
-                        read_timeout=60, write_timeout=120, connect_timeout=30, pool_timeout=60,
-                    )
+                loading_file_id = context.bot_data.get("loading_animation_file_id")
+                loading_media = loading_file_id or await asyncio.to_thread((ROOT / "assets/loading.gif").read_bytes)
+                loading_message = await context.bot.edit_message_media(
+                    chat_id=edit_target.chat_id, message_id=edit_target.message_id,
+                    media=InputMediaAnimation(media=loading_media, caption=f"{tg_emoji('loading')} {html.escape(t('Генерируется…'))}", parse_mode=ParseMode.HTML, filename="loading.gif"),
+                    read_timeout=60, write_timeout=120, connect_timeout=30, pool_timeout=60,
+                )
+                if isinstance(loading_message, Message) and loading_message.animation:
+                    context.bot_data["loading_animation_file_id"] = loading_message.animation.file_id
+                logging.info("%s loading animation", "Reused" if loading_file_id else "Uploaded")
             except BadRequest as error:
                 if "message is not modified" not in str(error).lower():
                     raise
