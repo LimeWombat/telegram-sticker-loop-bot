@@ -1584,6 +1584,7 @@ def _make_bg_args(settings: RenderSettings, user_id: int, duration: float) -> tu
             f"geq=r='r({axis},Y)+floor({dr_r}*{axis}/{dim})':"
             f"g='g({axis},Y)+floor({dr_g}*{axis}/{dim})':"
             f"b='b({axis},Y)+floor({dr_b}*{axis}/{dim})'"
+            f",loop=loop=-1:size=1:start=0,setpts=N/({settings.fps}*TB)"
         )
         color = f"color=c={settings.background_hex}:s={settings.width}x{settings.height}:r={settings.fps}:d={duration}"
         return (["-f", "lavfi", "-i", color], False, geq)
