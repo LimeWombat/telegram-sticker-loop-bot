@@ -1091,7 +1091,6 @@ def main_menu_keyboard(settings: RenderSettings) -> InlineKeyboardMarkup:
                 menu_button(t('Вотермарка · {0}', wm_val), "menu:watermark", "text"),
             ],
             [
-                menu_button(t('👁 Предпросмотр'), "menu:preview", "eye"),
                 menu_button(t('Сбросить всё'), "menu:reset", "delete"),
             ],
             [menu_button(t("🌍 Страна / язык"), "lang:menu:settings")],
@@ -1321,11 +1320,17 @@ async def safe_delete_message(message: Message) -> None:
 async def edit_menu_message(message: Message, text: str, reply_markup: InlineKeyboardMarkup) -> Message | None:
     try:
         if message.caption is not None:
-            return await message.edit_caption(
-                caption=text,
+            sent = await message.reply_text(
+                text,
                 parse_mode=ParseMode.HTML,
                 reply_markup=reply_markup,
+                disable_web_page_preview=True,
             )
+            try:
+                await message.edit_reply_markup(reply_markup=None)
+            except TelegramError:
+                logging.exception("Failed to remove old media menu keyboard")
+            return sent
         return await message.edit_text(
             text=text,
             parse_mode=ParseMode.HTML,
@@ -1373,19 +1378,6 @@ async def edit_pending_menu(
 
 
 async def send_menu_message(message: Message, settings: RenderSettings, section: str = "main") -> Message:
-    asset = menu_asset_for(section)
-    if asset:
-        try:
-            return await message.reply_animation(
-                animation=asset,
-                caption=settings_summary(settings),
-                parse_mode=ParseMode.HTML,
-                reply_markup=main_menu_keyboard(settings),
-                read_timeout=30,
-                connect_timeout=20,
-            )
-        except TelegramError:
-            logging.exception("Failed to send menu animation")
     return await message.reply_text(
         settings_summary(settings),
         parse_mode=ParseMode.HTML,
@@ -1401,28 +1393,7 @@ async def show_section_menu_message(
     reply_markup: InlineKeyboardMarkup,
     section: str,
 ) -> Message | None:
-    section = normalize_menu_asset_section(section)
-    if section != "main" and not MENU_SECTION_ASSETS.get(section):
-        return await edit_menu_message(message, text, reply_markup)
-    asset = menu_asset_for(section)
-    if not asset or section == "main":
-        return await edit_menu_message(message, text, reply_markup)
-
-    try:
-        sent = await context.bot.send_animation(
-            chat_id=message.chat_id,
-            animation=asset,
-            caption=text,
-            parse_mode=ParseMode.HTML,
-            reply_markup=reply_markup,
-            read_timeout=30,
-            connect_timeout=20,
-        )
-        await safe_delete_message(message)
-        return sent
-    except TelegramError:
-        logging.exception("Failed to send section menu animation for %s", section)
-        return await edit_menu_message(message, text, reply_markup)
+    return await edit_menu_message(message, text, reply_markup)
 
 
 def source_from_sticker(sticker: Sticker) -> SourceRef:
@@ -2537,16 +2508,6 @@ async def on_background_callback(update: Update, context: ContextTypes.DEFAULT_T
     )
 
     await query.message.reply_text(t('Фон: {0} {1}', name, color))
-    source = LAST_SOURCE.get(query.from_user.id)
-    if source and query.message:
-        await query.message.reply_text(t('Пересобираю последний стикер с новым фоном.'))
-        await process_source(
-            query.message,
-            context,
-            source,
-            settings_for(query.from_user.id),
-            actor_user_id=query.from_user.id,
-        )
 
 
 async def on_menu_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
@@ -2560,7 +2521,7 @@ async def on_menu_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) -
     data = query.data or ""
     current = settings_for(user_id)
 
-    if data == "menu:main":
+    if data in {"menu:main", "menu:preview"}:
         PENDING_ACTIONS.pop(user_id, None)
         await edit_menu_message(query.message, settings_summary(current), main_menu_keyboard(current))
         return
@@ -2810,27 +2771,6 @@ async def on_menu_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) -
             back_keyboard(),
         )
         return
-    if data == "menu:preview":
-        source = LAST_SOURCE.get(user_id)
-        if not source:
-            await edit_menu_message(
-                query.message,
-                t(
-                    '{0} <b>Пока нечего показывать.</b>\n'
-                    'Сначала пришли стикер, эмодзи или медиа — потом жми «Предпросмотр», и я пересоберу '
-                    'последний исходник с текущими настройками.',
-                    tg_emoji('eye', '👁'),
-                ),
-                main_menu_keyboard(current),
-            )
-            return
-        await edit_menu_message(
-            query.message,
-            t('{0} <b>Собираю предпросмотр...</b>', tg_emoji('loading', '🔄')),
-            main_menu_keyboard(current),
-        )
-        await process_source(query.message, context, source, current, actor_user_id=user_id)
-        return
     if data == "menu:reset":
         USER_SETTINGS.pop(user_id, None)
         USER_BG_IMAGES.pop(user_id, None)
@@ -3003,10 +2943,6 @@ async def on_media(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
         current = settings_for(update.effective_user.id)
         await send_menu_message(update.message, current)
         await update.message.reply_text(t('🖼 Фон загружен! Кидай стикер.'))
-        source = LAST_SOURCE.get(update.effective_user.id)
-        if source:
-            await update.message.reply_text(t('Пересобираю последний с новым фоном.'))
-            await process_source(update.message, context, source, current)
         return
 
     source = media_source_from_message(update.message)
